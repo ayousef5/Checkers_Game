@@ -73,10 +73,10 @@ public class GuiServer extends Application {
 	}
 
 	private void syncThemeButton(Node root) {
-		String g = lightTheme ? "\u263E" : "\u2600";
+		String label = lightTheme ? "Dark" : "Light";
 		visitNodes(root, n -> {
 			if (n instanceof Button && n.getStyleClass().contains("btn-theme-toggle")) {
-				((Button) n).setText(g);
+				((Button) n).setText(label);
 			}
 		});
 	}
@@ -89,7 +89,7 @@ public class GuiServer extends Application {
 		HBox topBar = new HBox();
 		Region sp = new Region();
 		HBox.setHgrow(sp, Priority.ALWAYS);
-		Button themeBtn = new Button(lightTheme ? "\u263E" : "\u2600");
+		Button themeBtn = new Button(lightTheme ? "Dark" : "Light");
 		themeBtn.getStyleClass().add("btn-theme-toggle");
 		themeBtn.setOnAction(e -> {
 			lightTheme = !lightTheme;

@@ -10,8 +10,6 @@ public final class AppFonts {
     public static void load() {
         loadFont("/fonts/DMSans-Regular.ttf");
         loadFont("/fonts/DMSans-Bold.ttf");
-        loadFont("/fonts/Nunito-Regular.ttf");
-        loadFont("/fonts/Nunito-Bold.ttf");
     }
 
     private static void loadFont(String resourcePath) {

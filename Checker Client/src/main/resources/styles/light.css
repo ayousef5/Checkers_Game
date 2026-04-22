@@ -1,44 +1,58 @@
 .root-app {
     -fx-background-color: #f5f0e8;
-    -fx-font-family: "DM Sans", "Segoe UI", sans-serif;
+    -fx-font-family: "DM Sans", sans-serif;
     -fx-font-size: 13px;
+    -fx-focus-color: #6a6a6a;
+    -fx-faint-focus-color: #c0c0c0;
 }
 
 .title-xl {
-    -fx-font-family: "Nunito", "DM Sans", sans-serif;
+    -fx-font-family: "DM Sans", sans-serif;
     -fx-font-weight: bold;
     -fx-font-size: 36px;
     -fx-text-fill: #2a2520;
 }
 
 .title-lg {
-    -fx-font-family: "Nunito", "DM Sans", sans-serif;
+    -fx-font-family: "DM Sans", sans-serif;
     -fx-font-weight: bold;
     -fx-font-size: 28px;
     -fx-text-fill: #3a322a;
 }
 
 .subtitle {
+    -fx-font-family: "DM Sans", sans-serif;
     -fx-text-fill: #6b5d4f;
     -fx-font-size: 15px;
 }
 
 .label-muted {
+    -fx-font-family: "DM Sans", sans-serif;
+    -fx-font-weight: normal;
     -fx-text-fill: #7a6b5c;
+}
+
+.section-header {
+    -fx-font-family: "DM Sans", sans-serif;
+    -fx-font-weight: bold;
+    -fx-text-fill: #5a4d42;
 }
 
 .card {
     -fx-background-color: #ffffff;
-    -fx-background-radius: 18px;
+    -fx-background-radius: 4px;
+    -fx-border-color: #d4c8b8;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
     -fx-padding: 28px 32px;
-    -fx-effect: dropshadow(gaussian, rgba(42, 37, 32, 0.12), 20, 0.2, 0, 6);
 }
 
 .text-field, .password-field {
+    -fx-font-family: "DM Sans", sans-serif;
     -fx-background-color: #fffefb;
-    -fx-background-radius: 12px;
+    -fx-background-radius: 4px;
     -fx-border-color: #d4c8b8;
-    -fx-border-radius: 12px;
+    -fx-border-radius: 4px;
     -fx-border-width: 1px;
     -fx-text-fill: #2a2520;
     -fx-prompt-text-fill: #9a8b7a;
@@ -46,22 +60,30 @@
 }
 
 .btn-primary {
-    -fx-background-color: #4a7de8;
-    -fx-text-fill: white;
-    -fx-background-radius: 12px;
+    -fx-font-family: "DM Sans", sans-serif;
+    -fx-background-color: #2f2f2f;
+    -fx-text-fill: #f8f8f8;
+    -fx-background-radius: 4px;
+    -fx-border-color: #1a1a1a;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
     -fx-padding: 12px 24px;
     -fx-font-weight: bold;
     -fx-cursor: hand;
 }
 
 .btn-primary:hover {
-    -fx-background-color: #5b8def;
+    -fx-background-color: #1f1f1f;
 }
 
 .btn-secondary {
+    -fx-font-family: "DM Sans", sans-serif;
     -fx-background-color: #ebe3d8;
     -fx-text-fill: #3a322a;
-    -fx-background-radius: 12px;
+    -fx-background-radius: 4px;
+    -fx-border-color: #d4c8b8;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
     -fx-padding: 12px 20px;
     -fx-cursor: hand;
 }
@@ -71,50 +93,91 @@
 }
 
 .btn-danger {
-    -fx-background-color: #c94c4c;
-    -fx-text-fill: white;
-    -fx-background-radius: 12px;
+    -fx-font-family: "DM Sans", sans-serif;
+    -fx-background-color: #8a4a4a;
+    -fx-text-fill: #ffffff;
+    -fx-background-radius: 4px;
+    -fx-border-color: #5a2a2a;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
     -fx-padding: 12px 20px;
     -fx-cursor: hand;
 }
 
 .btn-danger:hover {
-    -fx-background-color: #d85c5c;
+    -fx-background-color: #9a5a5a;
 }
 
+/* Plain text control: shows "Dark" in light mode to switch theme */
 .btn-theme-toggle {
-    -fx-background-color: #ebe3d8;
-    -fx-text-fill: #3a322a;
-    -fx-background-radius: 20px;
-    -fx-min-width: 44px;
-    -fx-min-height: 36px;
-    -fx-padding: 4px 12px;
-    -fx-font-size: 16px;
+    -fx-font-family: "DM Sans", sans-serif;
+    -fx-font-size: 13px;
+    -fx-text-fill: #5a4d42;
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
+    -fx-border-width: 0;
+    -fx-background-insets: 0;
+    -fx-padding: 2px 4px;
+    -fx-min-width: 0;
+    -fx-min-height: 0;
     -fx-cursor: hand;
 }
 
 .btn-theme-toggle:hover {
-    -fx-background-color: #e0d6c8;
+    -fx-background-color: transparent;
+    -fx-text-fill: #2a2218;
+}
+
+.btn-theme-toggle:focused {
+    -fx-background-color: transparent;
+    -fx-border-color: transparent;
 }
 
 .player-card {
     -fx-background-color: #ffffff;
-    -fx-background-radius: 16px;
+    -fx-background-radius: 4px;
+    -fx-border-color: #d4c8b8;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
     -fx-padding: 14px 18px;
-    -fx-effect: dropshadow(gaussian, rgba(42, 37, 32, 0.1), 14, 0.15, 0, 3);
+}
+
+.player-card.player-bar {
+    -fx-padding: 4px 8px 4px 8px;
+    -fx-alignment: center-left;
+}
+
+.player-bar .player-timer {
+    -fx-min-width: 56px;
+    -fx-pref-height: 28px;
+    -fx-min-height: 28px;
+    -fx-padding: 2px 6px 2px 6px;
+}
+
+.player-bar .player-name {
+    -fx-font-size: 14px;
 }
 
 .player-name {
-    -fx-font-family: "Nunito", "DM Sans", sans-serif;
+    -fx-font-family: "DM Sans", sans-serif;
     -fx-font-weight: bold;
     -fx-font-size: 15px;
     -fx-text-fill: #2a2520;
 }
 
 .player-timer {
-    -fx-font-family: "DM Sans", "Consolas", monospace;
-    -fx-font-size: 17px;
-    -fx-text-fill: #2a6bb8;
+    -fx-font-family: "DM Sans", sans-serif;
+    -fx-font-weight: normal;
+    -fx-font-size: 16px;
+    -fx-text-fill: #3a322a;
+    -fx-alignment: center-left;
+    -fx-background-color: #faf8f5;
+    -fx-border-color: #d4c8b8;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
+    -fx-background-radius: 4px;
+    -fx-padding: 6px 10px;
+    -fx-min-width: 56px;
 }
 
 .turn-banner {
@@ -123,14 +186,20 @@
     -fx-font-size: 14px;
 }
 
-.board-outer {
-    -fx-background-color: #ebe3d8;
-    -fx-background-radius: 14px;
-    -fx-padding: 12px;
-    -fx-effect: dropshadow(gaussian, rgba(42, 37, 32, 0.18), 24, 0.15, 0, 6);
+.board-wood-frame {
+    -fx-background-color: #8B5E3C;
+    -fx-background-radius: 4px;
+    -fx-padding: 0;
+}
+
+.board-wood-frame .board-axis-label {
+    -fx-font-family: "DM Sans", sans-serif;
+    -fx-text-fill: #e8d4c0;
+    -fx-font-size: 12px;
 }
 
 .board-axis-label {
+    -fx-font-family: "DM Sans", sans-serif;
     -fx-text-fill: #5a4d42;
     -fx-font-size: 12px;
 }
@@ -140,10 +209,13 @@
 }
 
 .tab-pane {
+    -fx-font-family: "DM Sans", sans-serif;
     -fx-background-color: #ffffff;
-    -fx-background-radius: 16px;
+    -fx-background-radius: 4px;
+    -fx-border-color: #d4c8b8;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
     -fx-padding: 8px 8px 0 8px;
-    -fx-effect: dropshadow(gaussian, rgba(42, 37, 32, 0.1), 16, 0.12, 0, 4);
 }
 
 .tab-pane .tab-header-area {
@@ -156,19 +228,19 @@
 
 .tab {
     -fx-background-color: #f0ebe4;
-    -fx-background-radius: 12px 12px 0 0;
+    -fx-background-radius: 4px 4px 0 0;
     -fx-padding: 10px 18px;
 }
 
 .tab:selected {
     -fx-background-color: #ffffff;
-    -fx-border-width: 0 0 3 0;
-    -fx-border-color: #4a7de8;
+    -fx-border-width: 0 0 2 0;
+    -fx-border-color: #5a5a5a;
 }
 
 .tab .tab-label {
     -fx-text-fill: #5a4d42;
-    -fx-font-family: "Nunito", "DM Sans", sans-serif;
+    -fx-font-family: "DM Sans", sans-serif;
     -fx-font-weight: bold;
 }
 
@@ -178,13 +250,17 @@
 
 .tab-content-area {
     -fx-background-color: #faf8f5;
-    -fx-background-radius: 0 0 14px 14px;
+    -fx-background-radius: 0 0 4px 4px;
 }
 
 .list-view {
+    -fx-font-family: "DM Sans", sans-serif;
     -fx-background-color: #faf8f5;
     -fx-control-inner-background: #faf8f5;
-    -fx-background-radius: 10px;
+    -fx-background-radius: 4px;
+    -fx-border-color: #d4c8b8;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
 }
 
 .list-view .list-cell {
@@ -198,7 +274,7 @@
 }
 
 .list-view .list-cell:selected {
-    -fx-background-color: #c8d8f4;
+    -fx-background-color: #d8d0c8;
 }
 
 .list-view .list-cell:hover {
@@ -206,15 +282,23 @@
 }
 
 .text-area {
+    -fx-font-family: "DM Sans", sans-serif;
     -fx-background-color: #faf8f5;
     -fx-control-inner-background: #faf8f5;
     -fx-text-fill: #2a2520;
-    -fx-background-radius: 10px;
+    -fx-background-radius: 4px;
+    -fx-border-color: #d4c8b8;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
 }
 
 .dialog-root {
+    -fx-font-family: "DM Sans", sans-serif;
     -fx-background-color: #ffffff;
-    -fx-background-radius: 16px;
+    -fx-background-radius: 4px;
+    -fx-border-color: #d4c8b8;
+    -fx-border-width: 1px;
+    -fx-border-radius: 4px;
     -fx-padding: 24px;
 }
 

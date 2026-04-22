@@ -6,11 +6,9 @@ import javafx.scene.Node;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.effect.InnerShadow;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
-import javafx.scene.paint.CycleMethod;
-import javafx.scene.paint.RadialGradient;
-import javafx.scene.paint.Stop;
 import javafx.scene.shape.Circle;
 import javafx.scene.shape.Rectangle;
 import javafx.scene.text.Font;
@@ -40,7 +38,16 @@ public class GuiClient extends Application {
 	int selectedRow = -1;
 	int selectedCol = -1;
 	ArrayList<int[]> validDestinations = new ArrayList<>();
-	static final int SQUARE_SIZE = 65;
+
+	private static final double BOARD_LEFT_LABEL_COL_PX = 22.0;
+	private static final double BOARD_BOTTOM_LABEL_ROW_PX = 20.0;
+	private static final double BOARD_WOOD_PAD_PX = 16.0;
+	/** Cell size in px; updated from available space in the wood frame. */
+	double squareSize = 48.0;
+
+	StackPane boardWoodFrame;
+	/** Fills left column; centers {@link #boardWoodFrame} without stretching it. */
+	StackPane boardCenterStack;
 
 	int myRating = 1200;
 	Label lobbyRatingLabel;
@@ -56,6 +63,35 @@ public class GuiClient extends Application {
 
 	static class GameSessionMirror {
 		static final int START_SECONDS = 180;
+	}
+
+	private double boardGridInnerWidth() {
+		return BOARD_LEFT_LABEL_COL_PX + 8 * squareSize;
+	}
+
+	private double boardGridInnerHeight() {
+		return 8 * squareSize + BOARD_BOTTOM_LABEL_ROW_PX;
+	}
+
+	/** Rigid frame: 16px padding on all sides of the grid. */
+	private double boardFrameOuterWidth() {
+		return boardGridInnerWidth() + 2 * BOARD_WOOD_PAD_PX;
+	}
+
+	private double boardFrameOuterHeight() {
+		return boardGridInnerHeight() + 2 * BOARD_WOOD_PAD_PX;
+	}
+
+	/** Lock wood frame to grid+padding; do not let parent stretch it. */
+	private void applyRigidBoardFrameSize() {
+		if (boardWoodFrame == null) return;
+		double ow = boardFrameOuterWidth();
+		double oh = boardFrameOuterHeight();
+		boardWoodFrame.setMinSize(ow, oh);
+		boardWoodFrame.setPrefSize(ow, oh);
+		boardWoodFrame.setMaxSize(ow, oh);
+		boardWoodFrame.setMaxWidth(Region.USE_PREF_SIZE);
+		boardWoodFrame.setMaxHeight(Region.USE_PREF_SIZE);
 	}
 
 	public static void main(String[] args) {
@@ -106,12 +142,13 @@ public class GuiClient extends Application {
 		}
 	}
 
-	private void syncThemeToggleGlyphs(Node root) {
+	/** "Dark" when in light mode (click → dark); "Light" when in dark mode (click → light). */
+	private void syncThemeToggleLabel(Node root) {
 		if (root == null) return;
-		String glyph = lightTheme ? "\u263E" : "\u2600";
+		String label = lightTheme ? "Dark" : "Light";
 		visitNodes(root, n -> {
 			if (n instanceof Button && n.getStyleClass().contains("btn-theme-toggle")) {
-				((Button) n).setText(glyph);
+				((Button) n).setText(label);
 			}
 		});
 	}
@@ -123,21 +160,22 @@ public class GuiClient extends Application {
 			Scene sc = sceneMap.get(key);
 			if (sc != null) {
 				applyTheme(sc);
-				syncThemeToggleGlyphs(sc.getRoot());
+				syncThemeToggleLabel(sc.getRoot());
 			}
 		}
 		Scene gameSc = sceneMap.get("game");
 		if (gameSc != null) {
 			applyTheme(gameSc);
-			syncThemeToggleGlyphs(gameSc.getRoot());
+			syncThemeToggleLabel(gameSc.getRoot());
 		}
 		if (boardGrid != null) {
 			renderBoard();
+			recalculateBoardSquareSize();
 		}
 	}
 
 	private Button createThemeToggleButton() {
-		Button b = new Button(lightTheme ? "\u263E" : "\u2600");
+		Button b = new Button(lightTheme ? "Dark" : "Light");
 		b.getStyleClass().add("btn-theme-toggle");
 		b.setOnAction(e -> onThemeToggled());
 		return b;
@@ -152,55 +190,65 @@ public class GuiClient extends Application {
 		return bar;
 	}
 
+	/** High-contrast board: white and black only (same in light and dark theme). */
 	private Color boardToneLightSquare(int boardRow, int boardCol) {
-		if (lightTheme) {
-			return (boardRow + boardCol) % 2 == 0 ? Color.web("#f2e8dc") : Color.web("#c9a87a");
-		}
-		return (boardRow + boardCol) % 2 == 0 ? Color.web("#e8d4b8") : Color.web("#7a4f28");
-	}
-
-	private RadialGradient pieceGradient(Color base) {
-		Color hi = base.interpolate(Color.WHITE, 0.42);
-		Color lo = base.darker();
-		return new RadialGradient(0, 0, 0.38, 0.38, 0.62, true, CycleMethod.NO_CYCLE,
-				new Stop(0, hi),
-				new Stop(0.55, base),
-				new Stop(1, lo));
+		return (boardRow + boardCol) % 2 == 0 ? Color.web("#FFFFFF") : Color.web("#1a1a1a");
 	}
 
 	private Color pieceRed() {
-		return lightTheme ? Color.web("#e07a6a") : Color.web("#f9a186");
+		return lightTheme ? Color.web("#b85850") : Color.web("#a84840");
 	}
 
-	private Color pieceBlack() {
+	/** "Black" side pieces: teal/blue, flat. */
+	private Color pieceBlue() {
 		return lightTheme ? Color.web("#3d7a9e") : Color.web("#147493");
 	}
 
+	private void styleFlatCheckerPiece(Circle circle, Color base) {
+		circle.setFill(base);
+		circle.setStroke(lightTheme ? Color.web("#0d0d0d", 0.55) : Color.web("#1a1a1a", 0.65));
+		circle.setStrokeWidth(1.0);
+	}
+
+	/** [avatar] [name (rating)] left; timer in a right-aligned node that takes remaining width. */
 	private HBox buildPlayerCard(String displayLine, Label timerLabel, String avatarHex) {
-		HBox row = new HBox(14);
+		HBox row = new HBox(10);
 		row.setAlignment(Pos.CENTER_LEFT);
-		row.getStyleClass().add("player-card");
-		row.setMaxWidth(Double.MAX_VALUE);
+		row.getStyleClass().addAll("player-card", "player-bar");
+
+		timerLabel.getStyleClass().clear();
+		timerLabel.getStyleClass().addAll("label", "player-timer");
+		timerLabel.setMinWidth(52);
+		timerLabel.setMaxWidth(Region.USE_PREF_SIZE);
+		timerLabel.setAlignment(Pos.CENTER_RIGHT);
 
 		StackPane av = new StackPane();
-		Circle avBg = new Circle(22);
+		double r = 18;
+		Circle avBg = new Circle(r);
 		avBg.setFill(Color.web(avatarHex));
 		String initial = (displayLine == null || displayLine.isEmpty()) ? "?"
 				: displayLine.substring(0, 1).toUpperCase();
 		Label ini = new Label(initial);
 		ini.setTextFill(Color.WHITE);
-		ini.setFont(Font.font("Nunito", FontWeight.BOLD, 15));
+		ini.setFont(Font.font("DM Sans", FontWeight.BOLD, 13));
 		av.getChildren().addAll(avBg, ini);
+		av.setMinSize(2 * r, 2 * r);
+		av.setMaxSize(2 * r, 2 * r);
 
-		VBox textCol = new VBox(4);
 		Label name = new Label(displayLine);
 		name.getStyleClass().add("player-name");
-		timerLabel.getStyleClass().clear();
-		timerLabel.getStyleClass().addAll("label", "player-timer");
-		textCol.getChildren().addAll(name, timerLabel);
-		HBox.setHgrow(textCol, Priority.ALWAYS);
+		name.setWrapText(false);
 
-		row.getChildren().addAll(av, textCol);
+		HBox left = new HBox(8, av, name);
+		left.setAlignment(Pos.CENTER_LEFT);
+		HBox.setHgrow(left, Priority.NEVER);
+
+		HBox timerBox = new HBox();
+		timerBox.setAlignment(Pos.CENTER_RIGHT);
+		timerBox.getChildren().add(timerLabel);
+		HBox.setHgrow(timerBox, Priority.ALWAYS);
+
+		row.getChildren().addAll(left, timerBox);
 		return row;
 	}
 
@@ -277,7 +325,7 @@ public class GuiClient extends Application {
 		lobbyRatingLabel.getStyleClass().add("subtitle");
 
 		Label gamesTitle = new Label("Games in progress");
-		gamesTitle.getStyleClass().add("label-muted");
+		gamesTitle.getStyleClass().add("section-header");
 
 		gamesListView = new ListView<>();
 		gamesListView.setPrefHeight(240);
@@ -347,43 +395,78 @@ public class GuiClient extends Application {
 		opponentTimerLabel = new Label(formatTime(GameSessionMirror.START_SECONDS));
 		myTimerLabel = new Label(formatTime(GameSessionMirror.START_SECONDS));
 
-		HBox oppCard = buildPlayerCard(opponentLabelText, opponentTimerLabel, "#5b8def");
-		HBox youCard = buildPlayerCard(youLabelText, myTimerLabel, "#e8956a");
+		HBox oppCard = buildPlayerCard(opponentLabelText, opponentTimerLabel, "#6e6e6e");
+		HBox youCard = buildPlayerCard(youLabelText, myTimerLabel, "#8a6a5a");
 
 		boardGrid = new GridPane();
+		boardWoodFrame = new StackPane(boardGrid);
+		boardWoodFrame.getStyleClass().add("board-wood-frame");
+		StackPane.setAlignment(boardGrid, Pos.CENTER);
+		InnerShadow woodInset = new InnerShadow();
+		woodInset.setRadius(10);
+		woodInset.setChoke(0.2);
+		woodInset.setColor(Color.color(0, 0, 0, 0.38));
+		woodInset.setOffsetX(0);
+		woodInset.setOffsetY(1);
+		boardWoodFrame.setEffect(woodInset);
+		boardWoodFrame.setPadding(new Insets(BOARD_WOOD_PAD_PX));
+
 		applyBoardGridConstraints();
 		renderBoard();
+		applyRigidBoardFrameSize();
 
-		ScrollPane boardScroll = new ScrollPane(boardGrid);
-		boardScroll.setFitToWidth(false);
-		boardScroll.setFitToHeight(false);
-		boardScroll.setPannable(true);
-		boardScroll.getStyleClass().add("scroll-pane");
-		boardScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
-		boardScroll.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+		boardCenterStack = new StackPane();
+		boardCenterStack.getChildren().add(boardWoodFrame);
+		StackPane.setAlignment(boardWoodFrame, Pos.CENTER);
+		boardCenterStack.setMinSize(0, 0);
+		boardCenterStack.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+		boardCenterStack.setStyle("-fx-background-color: transparent;");
 
-		StackPane boardOuter = new StackPane(boardScroll);
-		boardOuter.getStyleClass().add("board-outer");
+		VBox leftGroup = new VBox(6);
+		leftGroup.setAlignment(Pos.TOP_CENTER);
+		leftGroup.setPadding(Insets.EMPTY);
+		VBox.setVgrow(boardCenterStack, Priority.ALWAYS);
+		leftGroup.getChildren().addAll(oppCard, turnLabel, boardCenterStack, youCard);
+		leftGroup.setMinWidth(0);
 
-		VBox leftCol = new VBox(12);
-		leftCol.setPadding(new Insets(8, 20, 18, 20));
-		leftCol.setAlignment(Pos.TOP_CENTER);
-		leftCol.setMinWidth(32 + 8 * SQUARE_SIZE + 40);
-		VBox.setVgrow(boardOuter, Priority.ALWAYS);
-		leftCol.getChildren().addAll(oppCard, turnLabel, boardOuter, youCard);
+		turnLabel.setAlignment(Pos.CENTER);
+		turnLabel.setMaxWidth(Region.USE_PREF_SIZE);
+		oppCard.maxWidthProperty().bind(boardWoodFrame.widthProperty());
+		oppCard.minWidthProperty().bind(boardWoodFrame.widthProperty());
+		youCard.maxWidthProperty().bind(boardWoodFrame.widthProperty());
+		youCard.minWidthProperty().bind(boardWoodFrame.widthProperty());
+		turnLabel.maxWidthProperty().bind(boardWoodFrame.widthProperty());
 
+		final int sidebarFixedPx = 300;
 		VBox rightPanel = createRightPanel();
-		rightPanel.setPrefWidth(260);
-		rightPanel.setMinWidth(240);
+		rightPanel.setMinWidth(sidebarFixedPx);
+		rightPanel.setMaxWidth(sidebarFixedPx);
+		rightPanel.setPrefWidth(sidebarFixedPx);
 		rightPanel.getStyleClass().add("sidebar-panel");
+		HBox.setHgrow(rightPanel, Priority.NEVER);
+
+		HBox gameRow = new HBox(12);
+		gameRow.setPadding(new Insets(0, 12, 12, 12));
+		gameRow.setAlignment(Pos.TOP_LEFT);
+		gameRow.getChildren().addAll(leftGroup, rightPanel);
+		gameRow.setFillHeight(true);
+		HBox.setHgrow(leftGroup, Priority.ALWAYS);
+		rightPanel.maxHeightProperty().bind(gameRow.heightProperty());
+
+		boardCenterStack.widthProperty().addListener((o, a, b) -> recalculateBoardSquareSize());
+		boardCenterStack.heightProperty().addListener((o, a, b) -> recalculateBoardSquareSize());
 
 		root.setTop(buildTopThemeBar());
-		root.setCenter(leftCol);
-		root.setRight(rightPanel);
+		root.setCenter(gameRow);
 
 		updateTimerLabels();
 		Scene scene = new Scene(root, 1120, 760);
 		applyTheme(scene);
+		Platform.runLater(() -> {
+			recalculateBoardSquareSize();
+			scene.widthProperty().addListener((o, a, b) -> recalculateBoardSquareSize());
+			scene.heightProperty().addListener((o, a, b) -> recalculateBoardSquareSize());
+		});
 		return scene;
 	}
 
@@ -453,14 +536,43 @@ public class GuiClient extends Application {
 		return (sec / 60) + ":" + String.format("%02d", sec % 60);
 	}
 
+	/**
+	 * Picks the largest cell size that fits the centered board stack; wood frame
+	 * stays exactly grid+padding (via {@link #applyRigidBoardFrameSize}).
+	 */
+	private void recalculateBoardSquareSize() {
+		if (boardCenterStack == null || boardGrid == null) {
+			return;
+		}
+		double W = boardCenterStack.getWidth();
+		double H = boardCenterStack.getHeight();
+		if (W < 80 || H < 80) {
+			return;
+		}
+		double outerPad = 2 * BOARD_WOOD_PAD_PX;
+		// Max outer: (22+8s+32) x (8s+20+32) must fit in W x H
+		double sW = (W - BOARD_LEFT_LABEL_COL_PX - outerPad) / 8.0;
+		double sH = (H - BOARD_BOTTOM_LABEL_ROW_PX - outerPad) / 8.0;
+		double s = Math.min(sW, sH);
+		s = Math.max(16, Math.min(s, 160));
+		if (Math.abs(s - squareSize) < 0.4) {
+			applyRigidBoardFrameSize();
+			return;
+		}
+		squareSize = s;
+		applyBoardGridConstraints();
+		renderBoard();
+		applyRigidBoardFrameSize();
+	}
+
 	private void applyBoardGridConstraints() {
 		boardGrid.getColumnConstraints().clear();
 		boardGrid.getRowConstraints().clear();
-		ColumnConstraints labelCol = new ColumnConstraints(22, 22, 22);
+		ColumnConstraints labelCol = new ColumnConstraints(BOARD_LEFT_LABEL_COL_PX, BOARD_LEFT_LABEL_COL_PX, BOARD_LEFT_LABEL_COL_PX);
 		labelCol.setHgrow(Priority.NEVER);
 		boardGrid.getColumnConstraints().add(labelCol);
 		for (int i = 0; i < 8; i++) {
-			ColumnConstraints cc = new ColumnConstraints(SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+			ColumnConstraints cc = new ColumnConstraints(squareSize, squareSize, squareSize);
 			cc.setHgrow(Priority.NEVER);
 			boardGrid.getColumnConstraints().add(cc);
 		}
@@ -468,15 +580,17 @@ public class GuiClient extends Application {
 		row0.setVgrow(Priority.NEVER);
 		boardGrid.getRowConstraints().add(row0);
 		for (int i = 0; i < 8; i++) {
-			RowConstraints rc = new RowConstraints(SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE);
+			RowConstraints rc = new RowConstraints(squareSize, squareSize, squareSize);
 			rc.setVgrow(Priority.NEVER);
 			boardGrid.getRowConstraints().add(rc);
 		}
-		RowConstraints bottomLabels = new RowConstraints(20, 20, 20);
+		RowConstraints bottomLabels = new RowConstraints(
+				BOARD_BOTTOM_LABEL_ROW_PX, BOARD_BOTTOM_LABEL_ROW_PX, BOARD_BOTTOM_LABEL_ROW_PX);
 		bottomLabels.setVgrow(Priority.NEVER);
 		boardGrid.getRowConstraints().add(bottomLabels);
-		boardGrid.setMaxWidth(Region.USE_PREF_SIZE);
-		boardGrid.setMaxHeight(Region.USE_PREF_SIZE);
+		boardGrid.setMinSize(boardGridInnerWidth(), boardGridInnerHeight());
+		boardGrid.setPrefSize(boardGridInnerWidth(), boardGridInnerHeight());
+		boardGrid.setMaxSize(boardGridInnerWidth(), boardGridInnerHeight());
 	}
 
 	private void appendMoveHistoryText(String line) {
@@ -500,18 +614,14 @@ public class GuiClient extends Application {
 	}
 
 	private void setTurnStyle(boolean yourTurn, boolean captureRequired) {
-		if (lightTheme) {
-			if (yourTurn) {
-				turnLabel.setTextFill(captureRequired ? Color.web("#c2410c") : Color.web("#15803d"));
+		if (yourTurn) {
+			if (captureRequired) {
+				turnLabel.setTextFill(lightTheme ? Color.web("#c2410c") : Color.web("#fb923c"));
 			} else {
-				turnLabel.setTextFill(Color.web("#6b5d4f"));
+				turnLabel.setTextFill(lightTheme ? Color.web("#1a1a1a") : Color.web("#e8e8e8"));
 			}
 		} else {
-			if (yourTurn) {
-				turnLabel.setTextFill(captureRequired ? Color.web("#fb923c") : Color.web("#4ade80"));
-			} else {
-				turnLabel.setTextFill(Color.web("#a1a1aa"));
-			}
+			turnLabel.setTextFill(Color.web("#dc2626"));
 		}
 	}
 
@@ -522,7 +632,7 @@ public class GuiClient extends Application {
 		for (int visualCol = 0; visualCol < 8; visualCol++) {
 			int boardCol = flipped ? 7 - visualCol : visualCol;
 			Label colLabel = new Label(String.valueOf((char) ('A' + boardCol)));
-			colLabel.setMinSize(SQUARE_SIZE, 20);
+			colLabel.setMinSize(squareSize, BOARD_BOTTOM_LABEL_ROW_PX);
 			colLabel.setAlignment(Pos.CENTER);
 			colLabel.getStyleClass().add("board-axis-label");
 			boardGrid.add(colLabel, visualCol + 1, 9);
@@ -531,7 +641,7 @@ public class GuiClient extends Application {
 		for (int visualRow = 0; visualRow < 8; visualRow++) {
 			int boardRow = flipped ? 7 - visualRow : visualRow;
 			Label rowLabel = new Label(String.valueOf(8 - boardRow));
-			rowLabel.setMinSize(20, SQUARE_SIZE);
+			rowLabel.setMinSize(BOARD_LEFT_LABEL_COL_PX, squareSize);
 			rowLabel.setAlignment(Pos.CENTER);
 			rowLabel.getStyleClass().add("board-axis-label");
 			boardGrid.add(rowLabel, 0, visualRow + 1);
@@ -560,9 +670,9 @@ public class GuiClient extends Application {
 				int boardCol = flipped ? 7 - visualCol : visualCol;
 
 				StackPane square = new StackPane();
-				square.setMinSize(SQUARE_SIZE, SQUARE_SIZE);
+				square.setMinSize(squareSize, squareSize);
 
-				Rectangle rect = new Rectangle(SQUARE_SIZE, SQUARE_SIZE);
+				Rectangle rect = new Rectangle(squareSize, squareSize);
 				rect.setFill(boardToneLightSquare(boardRow, boardCol));
 				square.getChildren().add(rect);
 
@@ -574,17 +684,17 @@ public class GuiClient extends Application {
 					}
 				}
 				if (mustCapture) {
-					Rectangle tint = new Rectangle(SQUARE_SIZE, SQUARE_SIZE);
+					Rectangle tint = new Rectangle(squareSize, squareSize);
 					tint.setFill(Color.color(1, 0.35, 0.2, lightTheme ? 0.28 : 0.38));
 					square.getChildren().add(tint);
 				}
 
 				boolean isSelected = boardRow == selectedRow && boardCol == selectedCol;
 				if (isSelected) {
-					Circle ring = new Circle(SQUARE_SIZE / 2.0 - 4);
+					Circle ring = new Circle(squareSize / 2.0 - 4);
 					ring.setFill(Color.TRANSPARENT);
-					ring.setStroke(lightTheme ? Color.web("#2563eb") : Color.web("#7dd3fc"));
-					ring.setStrokeWidth(3);
+					ring.setStroke(lightTheme ? Color.web("#2a2a2a") : Color.web("#8a8a8a"));
+					ring.setStrokeWidth(2);
 					square.getChildren().add(ring);
 				}
 
@@ -596,25 +706,24 @@ public class GuiClient extends Application {
 					}
 				}
 				if (isValidDest) {
-					Circle dot = new Circle(8);
+					Circle dot = new Circle(Math.max(5, squareSize * 0.14));
 					dot.setMouseTransparent(true);
-					dot.setFill(lightTheme ? Color.web("#4a7de8").deriveColor(0, 1, 1, 0.88)
-							: Color.web("#5b8def").deriveColor(0, 1, 1, 0.9));
+					dot.setFill(lightTheme ? Color.web("#3a3a3a", 0.8) : Color.web("#5a5a5a", 0.9));
 					square.getChildren().add(dot);
 				}
 
 				if (localGame != null) {
 					Piece piece = localGame.board.getPiece(boardRow, boardCol);
 					if (piece != null) {
-						Circle circle = new Circle(SQUARE_SIZE / 2.0 - 6);
-						Color base = piece.color.equals("red") ? pieceRed() : pieceBlack();
-						circle.setFill(pieceGradient(base));
+						Circle circle = new Circle(squareSize / 2.0 - 6);
+						Color base = piece.color.equals("red") ? pieceRed() : pieceBlue();
+						styleFlatCheckerPiece(circle, base);
 						square.getChildren().add(circle);
 
 						if (piece.isKing) {
 							Text k = new Text("K");
 							k.setFill(Color.WHITE);
-							k.setFont(Font.font("Nunito", FontWeight.BOLD, 15));
+							k.setFont(Font.font("DM Sans", FontWeight.BOLD, Math.max(10, squareSize * 0.28)));
 							square.getChildren().add(k);
 						}
 					}
@@ -630,7 +739,7 @@ public class GuiClient extends Application {
 			if (spectating) {
 				String t = localGame.currentPlayer.equals("red") ? "Red" : "Black";
 				turnLabel.setText(t + "'s turn");
-				turnLabel.setTextFill(lightTheme ? Color.web("#5a4d42") : Color.web("#c4c4d8"));
+				turnLabel.setTextFill(lightTheme ? Color.web("#5a4d42") : Color.web("#a8a8a8"));
 			} else if (localGame.currentPlayer.equals(myColor)) {
 				if (!captureSources.isEmpty()) {
 					turnLabel.setText("Your Turn — Capture Required!");
@@ -773,7 +882,7 @@ public class GuiClient extends Application {
 				lobbyRatingLabel.setText("Rating: " + myRating + "  —  " + myUsername);
 				clientConnection.send(new Message(Message.MessageType.list_games, null));
 				primaryStage.setScene(sceneMap.get("lobby"));
-				syncThemeToggleGlyphs(sceneMap.get("lobby").getRoot());
+				syncThemeToggleLabel(sceneMap.get("lobby").getRoot());
 				break;
 
 			case auth_fail:
@@ -818,12 +927,12 @@ public class GuiClient extends Application {
 				youLabelText = sRed + " (" + srat[0] + ")";
 				sceneMap.put("game", createGameScene());
 				primaryStage.setScene(sceneMap.get("game"));
-				syncThemeToggleGlyphs(sceneMap.get("game").getRoot());
+				syncThemeToggleLabel(sceneMap.get("game").getRoot());
 				break;
 
 			case username_ok:
 				primaryStage.setScene(sceneMap.get("waiting"));
-				syncThemeToggleGlyphs(sceneMap.get("waiting").getRoot());
+				syncThemeToggleLabel(sceneMap.get("waiting").getRoot());
 				break;
 
 			case username_taken:
@@ -856,7 +965,7 @@ public class GuiClient extends Application {
 				blackTimeLeft = times[1];
 				sceneMap.put("game", createGameScene());
 				primaryStage.setScene(sceneMap.get("game"));
-				syncThemeToggleGlyphs(sceneMap.get("game").getRoot());
+				syncThemeToggleLabel(sceneMap.get("game").getRoot());
 				break;
 
 			case move:
@@ -896,7 +1005,7 @@ public class GuiClient extends Application {
 				if (!spectating && localGame != null && myColor != null) {
 					ArrayList<Move> vm = localGame.getValidMoves(myColor);
 					if (!vm.isEmpty() && !vm.get(0).capturedPositions.isEmpty()) {
-						invalidMsg = "A capture is available! You must move an orange-highlighted piece.";
+						invalidMsg = "A capture is available! You must move a highlighted piece.";
 					}
 				}
 				invalidAlert.setContentText(invalidMsg);
@@ -928,7 +1037,7 @@ public class GuiClient extends Application {
 
 			case waiting:
 				primaryStage.setScene(sceneMap.get("waiting"));
-				syncThemeToggleGlyphs(sceneMap.get("waiting").getRoot());
+				syncThemeToggleLabel(sceneMap.get("waiting").getRoot());
 				clientConnection.send(new Message(Message.MessageType.list_games, null));
 				break;
 
@@ -987,6 +1096,8 @@ public class GuiClient extends Application {
 		redTimeLeft = GameSessionMirror.START_SECONDS;
 		blackTimeLeft = GameSessionMirror.START_SECONDS;
 		boardGrid = null;
+		boardWoodFrame = null;
+		boardCenterStack = null;
 		turnLabel = null;
 		chatList = null;
 		moveHistoryList = null;
@@ -996,7 +1107,7 @@ public class GuiClient extends Application {
 			lobbyRatingLabel.setText("Rating: " + myRating + "  —  " + myUsername);
 		}
 		primaryStage.setScene(sceneMap.get("lobby"));
-		syncThemeToggleGlyphs(sceneMap.get("lobby").getRoot());
+		syncThemeToggleLabel(sceneMap.get("lobby").getRoot());
 		clientConnection.send(new Message(Message.MessageType.list_games, null));
 	}
 
