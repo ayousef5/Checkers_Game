@@ -172,11 +172,9 @@ public class Server { // main server class
 					break;
 
 				case play_again: // client wants to play again
-					if (currentGame != null) { // if in a game
-						ClientThread opp = currentGame.player1 == this ? currentGame.player2 :
-								currentGame.player1; // get opponent
-						opp.sendMessage(new Message(Message.MessageType.play_again, username)); // forward request
-					}
+					waitingQueue.add(this); // re-add to waiting queue
+					sendMessage(new Message(Message.MessageType.waiting, null)); // tell client to wait
+					matchPlayers(); // try to find a match
 					break;
 
 				case play_again_ack: // client acknowledged play again

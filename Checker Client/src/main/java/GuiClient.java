@@ -33,6 +33,7 @@ public class GuiClient extends Application { // main client GUI
 	int selectedRow = -1; // currently selected piece row
 	int selectedCol = -1; // currently selected piece col
 	ArrayList<int[]> validDestinations = new ArrayList<>(); // valid squares for selected piece
+	int moveCount = 0; // total moves made in this game
 	static final int SQUARE_SIZE = 65; // size of each board square in pixels
 
 	public static void main(String[] args) { // entry point
@@ -126,6 +127,8 @@ public class GuiClient extends Application { // main client GUI
 		youLabel.setTextFill(Color.WHITE); // white text
 
 		boardGrid = new GridPane(); // board grid
+		boardGrid.setStyle("-fx-background-color: #8A6F5A;"); // board background color
+		boardGrid.setPadding(new Insets(14)); // equal frame on all sides
 		renderBoard(); // draw initial board
 
 		leftPanel.getChildren().addAll(opponentLabel, turnLabel, boardGrid, youLabel);
@@ -136,7 +139,7 @@ public class GuiClient extends Application { // main client GUI
 		rightPanel.setStyle("-fx-background-color: #1e1e1e;"); // darker background
 
 		root.getChildren().addAll(leftPanel, rightPanel); // combine panels
-		return new Scene(root, 900, 650); // return scene
+		return new Scene(root, 900, 720); // return scene
 	}
 
 	private VBox createRightPanel() { // right panel with tabs and buttons
@@ -149,7 +152,7 @@ public class GuiClient extends Application { // main client GUI
 
 		// moves tab
 		moveHistoryList = new ListView<>(); // move history list
-		moveHistoryList.setStyle("-fx-background-color: #2b2b2b; -fx-text-fill: white;"); // dark style
+		moveHistoryList.setStyle("-fx-background-color: #2b2b2b; -fx-control-inner-background: #2b2b2b; -fx-text-fill: white;"); // dark style
 		Tab movesTab = new Tab("Moves", moveHistoryList); // moves tab
 
 		// chat tab
@@ -204,23 +207,29 @@ public class GuiClient extends Application { // main client GUI
 	public void renderBoard() { // draw the board and pieces
 		boardGrid.getChildren().clear(); // clear old board
 
-		for (int visualCol = 0; visualCol < 8; visualCol++) { // column labels
+		for (int visualCol = 0; visualCol < 8; visualCol++) { // bottom column labels
 			int boardCol = flipped ? 7 - visualCol : visualCol; // flip if needed
 			Label colLabel = new Label(String.valueOf((char)('A' + boardCol))); // A-H
 			colLabel.setMinSize(SQUARE_SIZE, 20); // fixed size
 			colLabel.setAlignment(Pos.CENTER); // center text
 			colLabel.setTextFill(Color.WHITE); // white text
+			colLabel.setFont(Font.font("Arial", FontWeight.BOLD, 15)); // slightly larger font
 			boardGrid.add(colLabel, visualCol + 1, 9); // below board
 		}
 
-		for (int visualRow = 0; visualRow < 8; visualRow++) { // row labels
+		for (int visualRow = 0; visualRow < 8; visualRow++) { // left row labels
 			int boardRow = flipped ? 7 - visualRow : visualRow; // flip if needed
 			Label rowLabel = new Label(String.valueOf(8 - boardRow)); // 1-8
 			rowLabel.setMinSize(20, SQUARE_SIZE); // fixed size
 			rowLabel.setAlignment(Pos.CENTER); // center text
 			rowLabel.setTextFill(Color.WHITE); // white text
+			rowLabel.setFont(Font.font("Arial", FontWeight.BOLD, 15)); // slightly larger font
 			boardGrid.add(rowLabel, 0, visualRow + 1); // left of board
 		}
+
+		Label spacer = new Label(""); // invisible spacer at top-right corner
+		spacer.setMinSize(20, 20); // same size as label row/col to balance all four sides
+		boardGrid.add(spacer, 9, 0); // top-right corner forces equal top and right frame
 
 		ArrayList<int[]> captureSources = new ArrayList<>(); // pieces that must capture this turn
 		if (localGame != null && localGame.currentPlayer.equals(myColor)) { // only on my turn
@@ -246,9 +255,9 @@ public class GuiClient extends Application { // main client GUI
 
 				Rectangle rect = new Rectangle(SQUARE_SIZE, SQUARE_SIZE); // background
 				if ((boardRow + boardCol) % 2 == 0) { // light square
-					rect.setFill(Color.web("#F0D9B5")); // light brown
+					rect.setFill(Color.web("#FFFFFF")); // white
 				} else { // dark square
-					rect.setFill(Color.web("#8B4513")); // dark brown
+					rect.setFill(Color.web("#000000")); // black
 				}
 				square.getChildren().add(rect); // add background
 
@@ -335,6 +344,13 @@ public class GuiClient extends Application { // main client GUI
 				renderBoard(); // re-render to show highlights
 			}
 		} else { // piece already selected
+			if (row == selectedRow && col == selectedCol) { // clicked the same piece again
+				selectedRow = -1; // deselect
+				selectedCol = -1; // deselect
+				validDestinations.clear(); // clear highlights
+				renderBoard(); // re-render
+				return; // done
+			}
 			if (piece != null && piece.color.equals(myColor)) { // clicked another own piece
 				selectedRow = row; // switch selection
 				selectedCol = col; // switch selection
@@ -444,13 +460,23 @@ public class GuiClient extends Application { // main client GUI
 				flipped = myColor.equals("black"); // blue player sees flipped board
 				localGame = new CheckersGame(myUsername, opponentUsername); // create local game
 				localGame.board = (Board) data[1]; // set board from server
+				moveCount = 0; // reset move counter for new game
 				sceneMap.put("game", createGameScene()); // create game scene
 				primaryStage.setScene(sceneMap.get("game")); // switch to game scene
 				break;
 
-			case move: // server sent updated board
-				localGame.board = (Board) msg.data; // update local board
+			case move: // server sent updated board + move
+				Object[] moveData = (Object[]) msg.data; // unpack move and board
+				Move lastMove = (Move) moveData[0]; // the move that was just made
+				localGame.board = (Board) moveData[1]; // update local board
+				String mover = localGame.currentPlayer; // capture who just moved before switching
 				localGame.currentPlayer = localGame.currentPlayer.equals("black") ? "red" : "black"; // switch turn
+				moveCount++; // increment move counter
+				String fromSquare = String.valueOf((char)('A' + lastMove.fromCol)) + (8 - lastMove.fromRow); // e.g. C6
+				String toSquare = String.valueOf((char)('A' + lastMove.toCol)) + (8 - lastMove.toRow); // e.g. D5
+				String moverLabel = mover.equals("red") ? "Orange" : "Blue"; // label for history
+				moveHistoryList.getItems().add(moveCount + ". " + moverLabel + ": " + fromSquare + "-" + toSquare); // add entry
+				moveHistoryList.scrollTo(moveHistoryList.getItems().size() - 1); // scroll to latest
 				renderBoard(); // re-render board
 				break;
 
@@ -543,6 +569,7 @@ public class GuiClient extends Application { // main client GUI
 		playAgain.setStyle("-fx-background-color: #147493; -fx-text-fill: white;"); // blue
 		playAgain.setOnAction(e -> { // on click
 			clientConnection.send(new Message(Message.MessageType.play_again, null)); // request replay
+			primaryStage.setScene(sceneMap.get("waiting")); // show waiting screen
 			dialog.close(); // close dialog
 		});
 

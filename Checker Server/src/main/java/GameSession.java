@@ -41,8 +41,9 @@ public class GameSession { // manages one game between two players
 
         if (game.gameOver) { // check if game ended
             broadcastToGame(new Message(Message.MessageType.game_over, game.winner)); // notify both
+            endGame(); // clear currentGame so players can queue again
         } else {
-            broadcastToGame(new Message(Message.MessageType.move, game.board)); // send updated board
+            broadcastToGame(new Message(Message.MessageType.move, new Object[]{move, game.board})); // send move + updated board
         }
     }
 
