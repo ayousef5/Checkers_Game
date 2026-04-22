@@ -1,177 +1,503 @@
-import javafx.application.Application; // base class for JavaFX apps
-import javafx.application.Platform; // run code on UI thread
-import javafx.geometry.Insets; // padding
-import javafx.geometry.Pos; // alignment
-import javafx.scene.Scene; // a screen/view
-import javafx.scene.control.*; // buttons, labels, tabs, etc.
-import javafx.scene.layout.*; // layout containers
-import javafx.scene.paint.Color; // colors
-import javafx.scene.shape.Circle; // piece shape
-import javafx.scene.shape.Rectangle; // board square shape
-import javafx.scene.text.Font; // font styling
-import javafx.scene.text.FontWeight; // bold text
-import javafx.scene.text.Text; // text node
-import javafx.stage.Modality; // for dialogs
-import javafx.stage.Stage; // window
-import java.util.ArrayList; // needed for lists
-import java.util.HashMap; // scene map
+import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.scene.control.*;
+import javafx.scene.effect.InnerShadow;
+import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
+import javafx.scene.shape.Circle;
+import javafx.scene.shape.Rectangle;
+import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
+import javafx.scene.text.Text;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
 
-public class GuiClient extends Application { // main client GUI
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.function.Consumer;
 
-	Client clientConnection; // connection to server
-	CheckersGame localGame; // local copy of game state
-	String myUsername; // this player's username
-	String opponentUsername; // opponent's username
-	String myColor; // "red" or "black"
-	HashMap<String, Scene> sceneMap; // all scenes
-	Stage primaryStage; // main window
-	boolean flipped = false; // true for blue player, flips board orientation
-	ListView<String> chatList; // chat messages
-	ListView<String> moveHistoryList; // move history
-	GridPane boardGrid; // the board UI
-	Label turnLabel; // shows whose turn it is
-	int selectedRow = -1; // currently selected piece row
-	int selectedCol = -1; // currently selected piece col
-	ArrayList<int[]> validDestinations = new ArrayList<>(); // valid squares for selected piece
-	int moveCount = 0; // total moves made in this game
-	static final int SQUARE_SIZE = 65; // size of each board square in pixels
+public class GuiClient extends Application {
 
-	public static void main(String[] args) { // entry point
-		launch(args); // start JavaFX
+	Client clientConnection;
+	CheckersGame localGame;
+	String myUsername;
+	String opponentUsername;
+	String myColor;
+	HashMap<String, Scene> sceneMap;
+	Stage primaryStage;
+	boolean flipped = false;
+	ListView<String> chatList;
+	ListView<String> moveHistoryList;
+	GridPane boardGrid;
+	Label turnLabel;
+	int selectedRow = -1;
+	int selectedCol = -1;
+	ArrayList<int[]> validDestinations = new ArrayList<>();
+
+	private static final double BOARD_LEFT_LABEL_COL_PX = 22.0;
+	private static final double BOARD_BOTTOM_LABEL_ROW_PX = 20.0;
+	private static final double BOARD_WOOD_PAD_PX = 16.0;
+	/** Cell size in px; updated from available space in the wood frame. */
+	double squareSize = 48.0;
+
+	StackPane boardWoodFrame;
+	/** Fills left column; centers {@link #boardWoodFrame} without stretching it. */
+	StackPane boardCenterStack;
+
+	int myRating = 1200;
+	Label lobbyRatingLabel;
+	ListView<GameListEntry> gamesListView;
+	Label opponentTimerLabel;
+	Label myTimerLabel;
+	int redTimeLeft = GameSessionMirror.START_SECONDS;
+	int blackTimeLeft = GameSessionMirror.START_SECONDS;
+	boolean spectating = false;
+	String opponentLabelText = "";
+	String youLabelText = "";
+	boolean lightTheme = ThemePreferences.isLightTheme();
+
+	static class GameSessionMirror {
+		static final int START_SECONDS = 180;
+	}
+
+	private double boardGridInnerWidth() {
+		return BOARD_LEFT_LABEL_COL_PX + 8 * squareSize;
+	}
+
+	private double boardGridInnerHeight() {
+		return 8 * squareSize + BOARD_BOTTOM_LABEL_ROW_PX;
+	}
+
+	/** Rigid frame: 16px padding on all sides of the grid. */
+	private double boardFrameOuterWidth() {
+		return boardGridInnerWidth() + 2 * BOARD_WOOD_PAD_PX;
+	}
+
+	private double boardFrameOuterHeight() {
+		return boardGridInnerHeight() + 2 * BOARD_WOOD_PAD_PX;
+	}
+
+	/** Lock wood frame to grid+padding; do not let parent stretch it. */
+	private void applyRigidBoardFrameSize() {
+		if (boardWoodFrame == null) return;
+		double ow = boardFrameOuterWidth();
+		double oh = boardFrameOuterHeight();
+		boardWoodFrame.setMinSize(ow, oh);
+		boardWoodFrame.setPrefSize(ow, oh);
+		boardWoodFrame.setMaxSize(ow, oh);
+		boardWoodFrame.setMaxWidth(Region.USE_PREF_SIZE);
+		boardWoodFrame.setMaxHeight(Region.USE_PREF_SIZE);
+	}
+
+	public static void main(String[] args) {
+		launch(args);
 	}
 
 	@Override
-	public void start(Stage stage) throws Exception { // called by JavaFX on startup
-		this.primaryStage = stage; // save stage reference
+	public void start(Stage stage) throws Exception {
+		AppFonts.load();
+		this.primaryStage = stage;
 
-		clientConnection = new Client(msg -> { // create client with callback
-			Platform.runLater(() -> handleMessage(msg)); // handle on UI thread
+		clientConnection = new Client(msg -> {
+			Platform.runLater(() -> handleMessage(msg));
 		});
-		clientConnection.start(); // connect to server
+		clientConnection.start();
 
-		sceneMap = new HashMap<>(); // initialize scene map
-		sceneMap.put("login", createLoginScene()); // add login scene
-		sceneMap.put("waiting", createWaitingScene()); // add waiting scene
+		sceneMap = new HashMap<>();
+		sceneMap.put("login", createLoginScene());
+		sceneMap.put("lobby", createLobbyScene());
+		sceneMap.put("waiting", createWaitingScene());
 
-		stage.setOnCloseRequest(e -> { // on window close
-			Platform.exit(); // exit JavaFX
-			System.exit(0); // exit app
+		stage.setOnCloseRequest(e -> {
+			Platform.exit();
+			System.exit(0);
 		});
 
-		stage.setScene(sceneMap.get("login")); // start with login
-		stage.setTitle("Checkers"); // window title
-		stage.show(); // show window
+		stage.setScene(sceneMap.get("login"));
+		stage.setTitle("Checkers");
+		stage.show();
 	}
 
-	private Scene createLoginScene() { // login screen
-		VBox root = new VBox(20); // vertical layout
-		root.setAlignment(Pos.CENTER); // center everything
-		root.setStyle("-fx-background-color: #2b2b2b;"); // dark background
+	private void applyTheme(Scene scene) {
+		if (scene == null) return;
+		String path = lightTheme ? "/styles/light.css" : "/styles/dark.css";
+		var url = getClass().getResource(path);
+		if (url != null) {
+			scene.getStylesheets().clear();
+			scene.getStylesheets().add(url.toExternalForm());
+		}
+	}
 
-		Label title = new Label("CHECKERS"); // title label
-		title.setFont(Font.font("Arial", FontWeight.BOLD, 36)); // large bold font
-		title.setTextFill(Color.WHITE); // white text
+	private void visitNodes(Node n, Consumer<Node> fn) {
+		fn.accept(n);
+		if (n instanceof Parent) {
+			for (Node c : ((Parent) n).getChildrenUnmodifiable()) {
+				visitNodes(c, fn);
+			}
+		}
+	}
 
-		TextField usernameField = new TextField(); // username input
-		usernameField.setPromptText("Enter username"); // placeholder text
-		usernameField.setMaxWidth(250); // limit width
-		usernameField.setStyle("-fx-background-color: #3c3c3c; -fx-text-fill: white; -fx-prompt-text-fill: gray;"); // dark style
+	/** "Dark" when in light mode (click → dark); "Light" when in dark mode (click → light). */
+	private void syncThemeToggleLabel(Node root) {
+		if (root == null) return;
+		String label = lightTheme ? "Dark" : "Light";
+		visitNodes(root, n -> {
+			if (n instanceof Button && n.getStyleClass().contains("btn-theme-toggle")) {
+				((Button) n).setText(label);
+			}
+		});
+	}
 
-		Button joinBtn = new Button("JOIN GAME"); // join button
-		joinBtn.setStyle("-fx-background-color: #147493; -fx-text-fill: white; -fx-font-weight: bold;"); // blue style
-		joinBtn.setOnAction(e -> { // on click
-			String name = usernameField.getText().trim(); // get username
-			if (!name.isEmpty()) { // if not empty
-				myUsername = name; // save username locally
-				clientConnection.send(new Message(Message.MessageType.username, name)); // send to server
+	private void onThemeToggled() {
+		lightTheme = !lightTheme;
+		ThemePreferences.setLightTheme(lightTheme);
+		for (String key : new String[]{"login", "lobby", "waiting"}) {
+			Scene sc = sceneMap.get(key);
+			if (sc != null) {
+				applyTheme(sc);
+				syncThemeToggleLabel(sc.getRoot());
+			}
+		}
+		Scene gameSc = sceneMap.get("game");
+		if (gameSc != null) {
+			applyTheme(gameSc);
+			syncThemeToggleLabel(gameSc.getRoot());
+		}
+		if (boardGrid != null) {
+			renderBoard();
+			recalculateBoardSquareSize();
+		}
+	}
+
+	private Button createThemeToggleButton() {
+		Button b = new Button(lightTheme ? "Dark" : "Light");
+		b.getStyleClass().add("btn-theme-toggle");
+		b.setOnAction(e -> onThemeToggled());
+		return b;
+	}
+
+	private HBox buildTopThemeBar() {
+		HBox bar = new HBox();
+		Region spacer = new Region();
+		HBox.setHgrow(spacer, Priority.ALWAYS);
+		bar.getChildren().addAll(spacer, createThemeToggleButton());
+		bar.setPadding(new Insets(10, 18, 6, 18));
+		return bar;
+	}
+
+	/** High-contrast board: white and black only (same in light and dark theme). */
+	private Color boardToneLightSquare(int boardRow, int boardCol) {
+		return (boardRow + boardCol) % 2 == 0 ? Color.web("#FFFFFF") : Color.web("#1a1a1a");
+	}
+
+	private Color pieceRed() {
+		return lightTheme ? Color.web("#b85850") : Color.web("#a84840");
+	}
+
+	/** "Black" side pieces: teal/blue, flat. */
+	private Color pieceBlue() {
+		return lightTheme ? Color.web("#3d7a9e") : Color.web("#147493");
+	}
+
+	private void styleFlatCheckerPiece(Circle circle, Color base) {
+		circle.setFill(base);
+		circle.setStroke(lightTheme ? Color.web("#0d0d0d", 0.55) : Color.web("#1a1a1a", 0.65));
+		circle.setStrokeWidth(1.0);
+	}
+
+	/** [avatar] [name (rating)] left; timer in a right-aligned node that takes remaining width. */
+	private HBox buildPlayerCard(String displayLine, Label timerLabel, String avatarHex) {
+		HBox row = new HBox(10);
+		row.setAlignment(Pos.CENTER_LEFT);
+		row.getStyleClass().addAll("player-card", "player-bar");
+
+		timerLabel.getStyleClass().clear();
+		timerLabel.getStyleClass().addAll("label", "player-timer");
+		timerLabel.setMinWidth(52);
+		timerLabel.setMaxWidth(Region.USE_PREF_SIZE);
+		timerLabel.setAlignment(Pos.CENTER_RIGHT);
+
+		StackPane av = new StackPane();
+		double r = 18;
+		Circle avBg = new Circle(r);
+		avBg.setFill(Color.web(avatarHex));
+		String initial = (displayLine == null || displayLine.isEmpty()) ? "?"
+				: displayLine.substring(0, 1).toUpperCase();
+		Label ini = new Label(initial);
+		ini.setTextFill(Color.WHITE);
+		ini.setFont(Font.font("DM Sans", FontWeight.BOLD, 13));
+		av.getChildren().addAll(avBg, ini);
+		av.setMinSize(2 * r, 2 * r);
+		av.setMaxSize(2 * r, 2 * r);
+
+		Label name = new Label(displayLine);
+		name.getStyleClass().add("player-name");
+		name.setWrapText(false);
+
+		HBox left = new HBox(8, av, name);
+		left.setAlignment(Pos.CENTER_LEFT);
+		HBox.setHgrow(left, Priority.NEVER);
+
+		HBox timerBox = new HBox();
+		timerBox.setAlignment(Pos.CENTER_RIGHT);
+		timerBox.getChildren().add(timerLabel);
+		HBox.setHgrow(timerBox, Priority.ALWAYS);
+
+		row.getChildren().addAll(left, timerBox);
+		return row;
+	}
+
+	private Scene createLoginScene() {
+		BorderPane root = new BorderPane();
+		root.getStyleClass().add("root-app");
+
+		VBox card = new VBox(18);
+		card.getStyleClass().add("card");
+		card.setAlignment(Pos.CENTER);
+		card.setMaxWidth(400);
+
+		Label title = new Label("CHECKERS");
+		title.getStyleClass().add("title-xl");
+
+		TextField usernameField = new TextField();
+		usernameField.setPromptText("Username");
+		usernameField.setMaxWidth(320);
+		usernameField.getStyleClass().add("text-field");
+
+		PasswordField passwordField = new PasswordField();
+		passwordField.setPromptText("Password");
+		passwordField.setMaxWidth(320);
+		passwordField.getStyleClass().add("text-field");
+
+		Button loginBtn = new Button("LOG IN");
+		loginBtn.getStyleClass().add("btn-primary");
+		loginBtn.setMaxWidth(Double.MAX_VALUE);
+		loginBtn.setOnAction(e -> {
+			String u = usernameField.getText().trim();
+			String p = passwordField.getText();
+			if (!u.isEmpty() && !p.isEmpty()) {
+				myUsername = u;
+				clientConnection.send(new Message(Message.MessageType.login, new String[]{u, p}));
 			}
 		});
 
-		root.getChildren().addAll(title, usernameField, joinBtn); // add to layout
-		return new Scene(root, 800, 600); // return scene
+		Button registerBtn = new Button("REGISTER");
+		registerBtn.getStyleClass().add("btn-secondary");
+		registerBtn.setMaxWidth(Double.MAX_VALUE);
+		registerBtn.setOnAction(e -> {
+			String u = usernameField.getText().trim();
+			String p = passwordField.getText();
+			if (!u.isEmpty() && !p.isEmpty()) {
+				myUsername = u;
+				clientConnection.send(new Message(Message.MessageType.register, new String[]{u, p}));
+			}
+		});
+
+		card.getChildren().addAll(title, usernameField, passwordField, loginBtn, registerBtn);
+
+		StackPane center = new StackPane(card);
+		root.setTop(buildTopThemeBar());
+		root.setCenter(center);
+		Scene scene = new Scene(root, 820, 660);
+		applyTheme(scene);
+		return scene;
 	}
 
-	private Scene createWaitingScene() { // waiting for opponent screen
-		VBox root = new VBox(20); // vertical layout
-		root.setAlignment(Pos.CENTER); // center everything
-		root.setStyle("-fx-background-color: #2b2b2b;"); // dark background
+	private Scene createLobbyScene() {
+		BorderPane root = new BorderPane();
+		root.getStyleClass().add("root-app");
 
-		Label label = new Label("PLAY CHECKERS!"); // waiting text
-		label.setFont(Font.font("Arial", FontWeight.BOLD, 36)); // large bold font
-		label.setTextFill(Color.WHITE); // white text
+		VBox card = new VBox(14);
+		card.getStyleClass().add("card");
+		card.setAlignment(Pos.TOP_CENTER);
+		card.setMaxWidth(520);
+		card.setFillWidth(true);
 
-		Label sub = new Label("Waiting for opponent..."); // sub label
-		sub.setFont(Font.font("Arial", 18)); // medium font
-		sub.setTextFill(Color.GRAY); // gray text
+		Label title = new Label("LOBBY");
+		title.getStyleClass().add("title-lg");
 
-		root.getChildren().addAll(label, sub); // add to layout
-		return new Scene(root, 800, 600); // return scene
+		lobbyRatingLabel = new Label("Rating: —");
+		lobbyRatingLabel.getStyleClass().add("subtitle");
+
+		Label gamesTitle = new Label("Games in progress");
+		gamesTitle.getStyleClass().add("section-header");
+
+		gamesListView = new ListView<>();
+		gamesListView.setPrefHeight(240);
+		gamesListView.getStyleClass().add("list-view");
+
+		Button refreshBtn = new Button("Refresh list");
+		refreshBtn.getStyleClass().add("btn-secondary");
+		refreshBtn.setMaxWidth(Double.MAX_VALUE);
+		refreshBtn.setOnAction(e -> clientConnection.send(new Message(Message.MessageType.list_games, null)));
+
+		Button spectateBtn = new Button("Spectate selected");
+		spectateBtn.getStyleClass().add("btn-secondary");
+		spectateBtn.setMaxWidth(Double.MAX_VALUE);
+		spectateBtn.setOnAction(e -> {
+			GameListEntry sel = gamesListView.getSelectionModel().getSelectedItem();
+			if (sel != null) {
+				clientConnection.send(new Message(Message.MessageType.spectator_join, sel.sessionId));
+			}
+		});
+
+		Button playBtn = new Button("FIND MATCH");
+		playBtn.getStyleClass().add("btn-primary");
+		playBtn.setMaxWidth(Double.MAX_VALUE);
+		playBtn.setOnAction(e -> clientConnection.send(new Message(Message.MessageType.join_queue, null)));
+
+		card.getChildren().addAll(title, lobbyRatingLabel, gamesTitle, gamesListView, refreshBtn, spectateBtn, playBtn);
+
+		StackPane center = new StackPane(card);
+		root.setTop(buildTopThemeBar());
+		root.setCenter(center);
+		Scene scene = new Scene(root, 820, 680);
+		applyTheme(scene);
+		return scene;
 	}
 
-	private Scene createGameScene() { // main game screen
-		turnLabel = new Label(""); // turn indicator
-		turnLabel.setFont(Font.font("Arial", FontWeight.BOLD, 14)); // bold font
-		HBox root = new HBox(); // horizontal split layout
-		root.setStyle("-fx-background-color: #2b2b2b;"); // dark background
+	private Scene createWaitingScene() {
+		BorderPane root = new BorderPane();
+		root.getStyleClass().add("root-app");
 
-		VBox leftPanel = new VBox(10); // left panel for board
-		leftPanel.setAlignment(Pos.CENTER); // center board
-		leftPanel.setPadding(new Insets(20)); // padding around board
+		VBox card = new VBox(20);
+		card.getStyleClass().add("card");
+		card.setAlignment(Pos.CENTER);
+		card.setMaxWidth(440);
 
-		Label opponentLabel = new Label(opponentUsername); // opponent name at top
-		opponentLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16)); // bold font
-		opponentLabel.setTextFill(Color.WHITE); // white text
+		Label label = new Label("PLAY CHECKERS!");
+		label.getStyleClass().add("title-xl");
 
-		Label youLabel = new Label("YOU"); // your name at bottom
-		youLabel.setFont(Font.font("Arial", FontWeight.BOLD, 16)); // bold font
-		youLabel.setTextFill(Color.WHITE); // white text
+		Label sub = new Label("Waiting for opponent...");
+		sub.getStyleClass().add("subtitle");
 
-		boardGrid = new GridPane(); // board grid
-		boardGrid.setStyle("-fx-background-color: #8A6F5A;"); // board background color
-		boardGrid.setPadding(new Insets(14)); // equal frame on all sides
-		renderBoard(); // draw initial board
-
-		leftPanel.getChildren().addAll(opponentLabel, turnLabel, boardGrid, youLabel);
-		HBox.setHgrow(leftPanel, Priority.ALWAYS); // take up 70%
-
-		VBox rightPanel = createRightPanel(); // right panel with tabs
-		rightPanel.setPrefWidth(240); // 30% width
-		rightPanel.setStyle("-fx-background-color: #1e1e1e;"); // darker background
-
-		root.getChildren().addAll(leftPanel, rightPanel); // combine panels
-		return new Scene(root, 900, 720); // return scene
+		card.getChildren().addAll(label, sub);
+		StackPane center = new StackPane(card);
+		root.setTop(buildTopThemeBar());
+		root.setCenter(center);
+		Scene scene = new Scene(root, 820, 640);
+		applyTheme(scene);
+		return scene;
 	}
 
-	private VBox createRightPanel() { // right panel with tabs and buttons
-		VBox panel = new VBox(10); // vertical layout
-		panel.setPadding(new Insets(10)); // padding
+	private Scene createGameScene() {
+		turnLabel = new Label("");
+		turnLabel.getStyleClass().add("turn-banner");
 
-		TabPane tabs = new TabPane(); // tab container
-		tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE); // no close button
-		tabs.setStyle("-fx-background-color: #1e1e1e;"); // dark style
+		BorderPane root = new BorderPane();
+		root.getStyleClass().add("root-app");
 
-		// moves tab
-		moveHistoryList = new ListView<>(); // move history list
-		moveHistoryList.setStyle("-fx-background-color: #2b2b2b; -fx-control-inner-background: #2b2b2b; -fx-text-fill: white;"); // dark style
-		Tab movesTab = new Tab("Moves", moveHistoryList); // moves tab
+		opponentTimerLabel = new Label(formatTime(GameSessionMirror.START_SECONDS));
+		myTimerLabel = new Label(formatTime(GameSessionMirror.START_SECONDS));
 
-		// chat tab
-		chatList = new ListView<>(); // chat messages list
-		chatList.setStyle("-fx-background-color: #2b2b2b; -fx-text-fill: white;"); // dark style
-		TextField chatInput = new TextField(); // chat input
-		chatInput.setPromptText("Message..."); // placeholder
-		chatInput.setStyle("-fx-background-color: #3c3c3c; -fx-text-fill: white; -fx-prompt-text-fill: gray;"); // dark style
-		Button sendBtn = new Button("Send"); // send button
-		sendBtn.setStyle("-fx-background-color: #147493; -fx-text-fill: white;"); // blue style
-		sendBtn.setOnAction(e -> sendChat(chatInput.getText(), chatInput)); // send on click
-		HBox chatInputBox = new HBox(5, chatInput, sendBtn); // input row
-		HBox.setHgrow(chatInput, Priority.ALWAYS); // input takes full width
-		VBox chatBox = new VBox(5, chatList, chatInputBox); // chat layout
-		VBox.setVgrow(chatList, Priority.ALWAYS); // list takes remaining space
-		Tab chatTab = new Tab("Chat", chatBox); // chat tab
+		HBox oppCard = buildPlayerCard(opponentLabelText, opponentTimerLabel, "#6e6e6e");
+		HBox youCard = buildPlayerCard(youLabelText, myTimerLabel, "#8a6a5a");
 
-		// rules tab
-		TextArea rulesText = new TextArea( // rules content
+		boardGrid = new GridPane();
+		boardWoodFrame = new StackPane(boardGrid);
+		boardWoodFrame.getStyleClass().add("board-wood-frame");
+		StackPane.setAlignment(boardGrid, Pos.CENTER);
+		InnerShadow woodInset = new InnerShadow();
+		woodInset.setRadius(10);
+		woodInset.setChoke(0.2);
+		woodInset.setColor(Color.color(0, 0, 0, 0.38));
+		woodInset.setOffsetX(0);
+		woodInset.setOffsetY(1);
+		boardWoodFrame.setEffect(woodInset);
+		boardWoodFrame.setPadding(new Insets(BOARD_WOOD_PAD_PX));
+
+		applyBoardGridConstraints();
+		renderBoard();
+		applyRigidBoardFrameSize();
+
+		boardCenterStack = new StackPane();
+		boardCenterStack.getChildren().add(boardWoodFrame);
+		StackPane.setAlignment(boardWoodFrame, Pos.CENTER);
+		boardCenterStack.setMinSize(0, 0);
+		boardCenterStack.setMaxSize(Double.MAX_VALUE, Double.MAX_VALUE);
+		boardCenterStack.setStyle("-fx-background-color: transparent;");
+
+		VBox leftGroup = new VBox(6);
+		leftGroup.setAlignment(Pos.TOP_CENTER);
+		leftGroup.setPadding(Insets.EMPTY);
+		VBox.setVgrow(boardCenterStack, Priority.ALWAYS);
+		leftGroup.getChildren().addAll(oppCard, turnLabel, boardCenterStack, youCard);
+		leftGroup.setMinWidth(0);
+
+		turnLabel.setAlignment(Pos.CENTER);
+		turnLabel.setMaxWidth(Region.USE_PREF_SIZE);
+		oppCard.maxWidthProperty().bind(boardWoodFrame.widthProperty());
+		oppCard.minWidthProperty().bind(boardWoodFrame.widthProperty());
+		youCard.maxWidthProperty().bind(boardWoodFrame.widthProperty());
+		youCard.minWidthProperty().bind(boardWoodFrame.widthProperty());
+		turnLabel.maxWidthProperty().bind(boardWoodFrame.widthProperty());
+
+		final int sidebarFixedPx = 300;
+		VBox rightPanel = createRightPanel();
+		rightPanel.setMinWidth(sidebarFixedPx);
+		rightPanel.setMaxWidth(sidebarFixedPx);
+		rightPanel.setPrefWidth(sidebarFixedPx);
+		rightPanel.getStyleClass().add("sidebar-panel");
+		HBox.setHgrow(rightPanel, Priority.NEVER);
+
+		HBox gameRow = new HBox(12);
+		gameRow.setPadding(new Insets(0, 12, 12, 12));
+		gameRow.setAlignment(Pos.TOP_LEFT);
+		gameRow.getChildren().addAll(leftGroup, rightPanel);
+		gameRow.setFillHeight(true);
+		HBox.setHgrow(leftGroup, Priority.ALWAYS);
+		rightPanel.maxHeightProperty().bind(gameRow.heightProperty());
+
+		boardCenterStack.widthProperty().addListener((o, a, b) -> recalculateBoardSquareSize());
+		boardCenterStack.heightProperty().addListener((o, a, b) -> recalculateBoardSquareSize());
+
+		root.setTop(buildTopThemeBar());
+		root.setCenter(gameRow);
+
+		updateTimerLabels();
+		Scene scene = new Scene(root, 1120, 760);
+		applyTheme(scene);
+		Platform.runLater(() -> {
+			recalculateBoardSquareSize();
+			scene.widthProperty().addListener((o, a, b) -> recalculateBoardSquareSize());
+			scene.heightProperty().addListener((o, a, b) -> recalculateBoardSquareSize());
+		});
+		return scene;
+	}
+
+	private VBox createRightPanel() {
+		VBox panel = new VBox(12);
+		panel.setPadding(new Insets(14, 14, 14, 10));
+
+		TabPane tabs = new TabPane();
+		tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+		tabs.getStyleClass().add("tab-pane");
+
+		moveHistoryList = new ListView<>();
+		moveHistoryList.getStyleClass().add("list-view");
+		moveHistoryList.getItems().add("Starting Position");
+		Tab movesTab = new Tab("Moves", moveHistoryList);
+
+		chatList = new ListView<>();
+		chatList.getStyleClass().add("list-view");
+		TextField chatInput = new TextField();
+		chatInput.setPromptText("Message...");
+		chatInput.getStyleClass().add("text-field");
+		Button sendBtn = new Button("Send");
+		sendBtn.getStyleClass().add("btn-primary");
+		sendBtn.setOnAction(e -> sendChat(chatInput.getText(), chatInput));
+		HBox chatInputBox = new HBox(8, chatInput, sendBtn);
+		HBox.setHgrow(chatInput, Priority.ALWAYS);
+		VBox chatBox = new VBox(8, chatList, chatInputBox);
+		VBox.setVgrow(chatList, Priority.ALWAYS);
+		Tab chatTab = new Tab("Chat", chatBox);
+
+		TextArea rulesText = new TextArea(
 				"CHECKERS RULES\n\n" +
 						"- Pieces move diagonally forward.\n" +
 						"- Captures are mandatory.\n" +
@@ -180,414 +506,646 @@ public class GuiClient extends Application { // main client GUI
 						"- Kings move in all diagonal directions.\n" +
 						"- Win by leaving opponent with no moves."
 		);
-		rulesText.setEditable(false); // read only
-		rulesText.setWrapText(true); // wrap long lines
-		rulesText.setStyle("-fx-background-color: #2b2b2b; -fx-text-fill: white; -fx-control-inner-background:#2b2b2b;"); // dark style
-		Tab rulesTab = new Tab("Rules", rulesText); // rules tab
+		rulesText.setEditable(false);
+		rulesText.setWrapText(true);
+		rulesText.getStyleClass().add("text-area");
+		Tab rulesTab = new Tab("Rules", rulesText);
 
-		tabs.getTabs().addAll(movesTab, chatTab, rulesTab); // add all tabs
-		VBox.setVgrow(tabs, Priority.ALWAYS); // tabs take remaining space
+		tabs.getTabs().addAll(movesTab, chatTab, rulesTab);
+		VBox.setVgrow(tabs, Priority.ALWAYS);
 
-		// bottom buttons
-		Button drawBtn = new Button("½ Draw"); // draw offer button
-		drawBtn.setStyle("-fx-background-color: #3c3c3c; -fx-text-fill: white;"); // dark style
-		drawBtn.setOnAction(e -> showDrawDialog()); // show draw dialog on click
+		Button drawBtn = new Button("½ Draw");
+		drawBtn.getStyleClass().add("btn-secondary");
+		drawBtn.setOnAction(e -> showDrawDialog());
+		drawBtn.setDisable(spectating);
 
-		Button abortBtn = new Button("Abort"); // abort/resign button
-		abortBtn.setStyle("-fx-background-color: #8B0000; -fx-text-fill: white;"); // red style
-		abortBtn.setOnAction(e -> showResignDialog()); // show resign dialog on click
+		Button abortBtn = new Button("Abort");
+		abortBtn.getStyleClass().add("btn-danger");
+		abortBtn.setOnAction(e -> showResignDialog());
+		abortBtn.setDisable(spectating);
 
-		HBox btnRow = new HBox(10, drawBtn, abortBtn); // button row
-		btnRow.setAlignment(Pos.CENTER); // center buttons
+		HBox btnRow = new HBox(10, drawBtn, abortBtn);
+		btnRow.setAlignment(Pos.CENTER);
 
-		panel.getChildren().addAll(tabs, btnRow); // add to panel
-		return panel; // return panel
+		panel.getChildren().addAll(tabs, btnRow);
+		return panel;
 	}
 
-	public void renderBoard() { // draw the board and pieces
-		boardGrid.getChildren().clear(); // clear old board
+	private static String formatTime(int sec) {
+		sec = Math.max(0, sec);
+		return (sec / 60) + ":" + String.format("%02d", sec % 60);
+	}
 
-		for (int visualCol = 0; visualCol < 8; visualCol++) { // bottom column labels
-			int boardCol = flipped ? 7 - visualCol : visualCol; // flip if needed
-			Label colLabel = new Label(String.valueOf((char)('A' + boardCol))); // A-H
-			colLabel.setMinSize(SQUARE_SIZE, 20); // fixed size
-			colLabel.setAlignment(Pos.CENTER); // center text
-			colLabel.setTextFill(Color.WHITE); // white text
-			colLabel.setFont(Font.font("Arial", FontWeight.BOLD, 15)); // slightly larger font
-			boardGrid.add(colLabel, visualCol + 1, 9); // below board
+	/**
+	 * Picks the largest cell size that fits the centered board stack; wood frame
+	 * stays exactly grid+padding (via {@link #applyRigidBoardFrameSize}).
+	 */
+	private void recalculateBoardSquareSize() {
+		if (boardCenterStack == null || boardGrid == null) {
+			return;
 		}
-
-		for (int visualRow = 0; visualRow < 8; visualRow++) { // left row labels
-			int boardRow = flipped ? 7 - visualRow : visualRow; // flip if needed
-			Label rowLabel = new Label(String.valueOf(8 - boardRow)); // 1-8
-			rowLabel.setMinSize(20, SQUARE_SIZE); // fixed size
-			rowLabel.setAlignment(Pos.CENTER); // center text
-			rowLabel.setTextFill(Color.WHITE); // white text
-			rowLabel.setFont(Font.font("Arial", FontWeight.BOLD, 15)); // slightly larger font
-			boardGrid.add(rowLabel, 0, visualRow + 1); // left of board
+		double W = boardCenterStack.getWidth();
+		double H = boardCenterStack.getHeight();
+		if (W < 80 || H < 80) {
+			return;
 		}
+		double outerPad = 2 * BOARD_WOOD_PAD_PX;
+		// Max outer: (22+8s+32) x (8s+20+32) must fit in W x H
+		double sW = (W - BOARD_LEFT_LABEL_COL_PX - outerPad) / 8.0;
+		double sH = (H - BOARD_BOTTOM_LABEL_ROW_PX - outerPad) / 8.0;
+		double s = Math.min(sW, sH);
+		s = Math.max(16, Math.min(s, 160));
+		if (Math.abs(s - squareSize) < 0.4) {
+			applyRigidBoardFrameSize();
+			return;
+		}
+		squareSize = s;
+		applyBoardGridConstraints();
+		renderBoard();
+		applyRigidBoardFrameSize();
+	}
 
-		Label spacer = new Label(""); // invisible spacer at top-right corner
-		spacer.setMinSize(20, 20); // same size as label row/col to balance all four sides
-		boardGrid.add(spacer, 9, 0); // top-right corner forces equal top and right frame
+	private void applyBoardGridConstraints() {
+		boardGrid.getColumnConstraints().clear();
+		boardGrid.getRowConstraints().clear();
+		ColumnConstraints labelCol = new ColumnConstraints(BOARD_LEFT_LABEL_COL_PX, BOARD_LEFT_LABEL_COL_PX, BOARD_LEFT_LABEL_COL_PX);
+		labelCol.setHgrow(Priority.NEVER);
+		boardGrid.getColumnConstraints().add(labelCol);
+		for (int i = 0; i < 8; i++) {
+			ColumnConstraints cc = new ColumnConstraints(squareSize, squareSize, squareSize);
+			cc.setHgrow(Priority.NEVER);
+			boardGrid.getColumnConstraints().add(cc);
+		}
+		RowConstraints row0 = new RowConstraints(0, 0, 0);
+		row0.setVgrow(Priority.NEVER);
+		boardGrid.getRowConstraints().add(row0);
+		for (int i = 0; i < 8; i++) {
+			RowConstraints rc = new RowConstraints(squareSize, squareSize, squareSize);
+			rc.setVgrow(Priority.NEVER);
+			boardGrid.getRowConstraints().add(rc);
+		}
+		RowConstraints bottomLabels = new RowConstraints(
+				BOARD_BOTTOM_LABEL_ROW_PX, BOARD_BOTTOM_LABEL_ROW_PX, BOARD_BOTTOM_LABEL_ROW_PX);
+		bottomLabels.setVgrow(Priority.NEVER);
+		boardGrid.getRowConstraints().add(bottomLabels);
+		boardGrid.setMinSize(boardGridInnerWidth(), boardGridInnerHeight());
+		boardGrid.setPrefSize(boardGridInnerWidth(), boardGridInnerHeight());
+		boardGrid.setMaxSize(boardGridInnerWidth(), boardGridInnerHeight());
+	}
 
-		ArrayList<int[]> captureSources = new ArrayList<>(); // pieces that must capture this turn
-		if (localGame != null && localGame.currentPlayer.equals(myColor)) { // only on my turn
-			ArrayList<Move> allValid = localGame.getValidMoves(myColor); // get all valid moves
-			if (!allValid.isEmpty() && !allValid.get(0).capturedPositions.isEmpty()) { // jumps exist
-				for (Move m : allValid) { // collect unique source positions
-					boolean dup = false;
-					for (int[] s : captureSources) { // check for duplicates
-						if (s[0] == m.fromRow && s[1] == m.fromCol) { dup = true; break; }
-					}
-					if (!dup) captureSources.add(new int[]{m.fromRow, m.fromCol}); // add source
-				}
+	private void appendMoveHistoryText(String line) {
+		if (moveHistoryList == null || line == null || line.isEmpty()) return;
+		moveHistoryList.getItems().add(line);
+		int last = moveHistoryList.getItems().size() - 1;
+		Platform.runLater(() -> moveHistoryList.scrollTo(last));
+	}
+
+	private void updateTimerLabels() {
+		if (opponentTimerLabel == null || myTimerLabel == null) return;
+		if (spectating) {
+			opponentTimerLabel.setText(formatTime(blackTimeLeft));
+			myTimerLabel.setText(formatTime(redTimeLeft));
+		} else {
+			int mine = myColor.equals("red") ? redTimeLeft : blackTimeLeft;
+			int opp = myColor.equals("red") ? blackTimeLeft : redTimeLeft;
+			opponentTimerLabel.setText(formatTime(opp));
+			myTimerLabel.setText(formatTime(mine));
+		}
+	}
+
+	private void setTurnStyle(boolean yourTurn, boolean captureRequired) {
+		if (yourTurn) {
+			if (captureRequired) {
+				turnLabel.setTextFill(lightTheme ? Color.web("#c2410c") : Color.web("#fb923c"));
+			} else {
+				turnLabel.setTextFill(lightTheme ? Color.web("#1a1a1a") : Color.web("#e8e8e8"));
 			}
+		} else {
+			turnLabel.setTextFill(Color.web("#dc2626"));
+		}
+	}
+
+	public void renderBoard() {
+		if (boardGrid == null) return;
+		boardGrid.getChildren().clear();
+
+		for (int visualCol = 0; visualCol < 8; visualCol++) {
+			int boardCol = flipped ? 7 - visualCol : visualCol;
+			Label colLabel = new Label(String.valueOf((char) ('A' + boardCol)));
+			colLabel.setMinSize(squareSize, BOARD_BOTTOM_LABEL_ROW_PX);
+			colLabel.setAlignment(Pos.CENTER);
+			colLabel.getStyleClass().add("board-axis-label");
+			boardGrid.add(colLabel, visualCol + 1, 9);
 		}
 
-		for (int visualRow = 0; visualRow < 8; visualRow++) { // each row
-			for (int visualCol = 0; visualCol < 8; visualCol++) { // each column
-				int boardRow = flipped ? 7 - visualRow : visualRow; // actual board row
-				int boardCol = flipped ? 7 - visualCol : visualCol; // actual board col
+		for (int visualRow = 0; visualRow < 8; visualRow++) {
+			int boardRow = flipped ? 7 - visualRow : visualRow;
+			Label rowLabel = new Label(String.valueOf(8 - boardRow));
+			rowLabel.setMinSize(BOARD_LEFT_LABEL_COL_PX, squareSize);
+			rowLabel.setAlignment(Pos.CENTER);
+			rowLabel.getStyleClass().add("board-axis-label");
+			boardGrid.add(rowLabel, 0, visualRow + 1);
+		}
 
-				StackPane square = new StackPane(); // container for square + piece
-				square.setMinSize(SQUARE_SIZE, SQUARE_SIZE); // fixed size
-
-				Rectangle rect = new Rectangle(SQUARE_SIZE, SQUARE_SIZE); // background
-				if ((boardRow + boardCol) % 2 == 0) { // light square
-					rect.setFill(Color.web("#FFFFFF")); // white
-				} else { // dark square
-					rect.setFill(Color.web("#000000")); // black
-				}
-				square.getChildren().add(rect); // add background
-
-				if (boardRow == selectedRow && boardCol == selectedCol) { // selected
-					rect.setFill(Color.web("#aef060")); // green highlight
-				}
-				boolean isValidDest = false; // check if this square is a valid destination
-				for (int[] dest : validDestinations) { // check each valid destination
-					if (dest[0] == boardRow && dest[1] == boardCol) { // match found
-						isValidDest = true; // mark as valid
-						break;
-					}
-				}
-				if (isValidDest) { // highlight valid destination
-					rect.setFill(Color.web("#f6f669")); // yellow highlight
-				}
-				if (!isValidDest && !(boardRow == selectedRow && boardCol == selectedCol)) { // not already highlighted
-					for (int[] src : captureSources) { // check mandatory capture sources
-						if (src[0] == boardRow && src[1] == boardCol) { // must-capture piece
-							rect.setFill(Color.web("#FF6B35")); // orange = must capture
+		ArrayList<int[]> captureSources = new ArrayList<>();
+		if (!spectating && localGame != null && localGame.currentPlayer.equals(myColor)) {
+			ArrayList<Move> allValid = localGame.getValidMoves(myColor);
+			if (!allValid.isEmpty() && !allValid.get(0).capturedPositions.isEmpty()) {
+				for (Move m : allValid) {
+					boolean dup = false;
+					for (int[] s : captureSources) {
+						if (s[0] == m.fromRow && s[1] == m.fromCol) {
+							dup = true;
 							break;
 						}
 					}
+					if (!dup) captureSources.add(new int[]{m.fromRow, m.fromCol});
+				}
+			}
+		}
+
+		for (int visualRow = 0; visualRow < 8; visualRow++) {
+			for (int visualCol = 0; visualCol < 8; visualCol++) {
+				int boardRow = flipped ? 7 - visualRow : visualRow;
+				int boardCol = flipped ? 7 - visualCol : visualCol;
+
+				StackPane square = new StackPane();
+				square.setMinSize(squareSize, squareSize);
+
+				Rectangle rect = new Rectangle(squareSize, squareSize);
+				rect.setFill(boardToneLightSquare(boardRow, boardCol));
+				square.getChildren().add(rect);
+
+				boolean mustCapture = false;
+				for (int[] src : captureSources) {
+					if (src[0] == boardRow && src[1] == boardCol) {
+						mustCapture = true;
+						break;
+					}
+				}
+				if (mustCapture) {
+					Rectangle tint = new Rectangle(squareSize, squareSize);
+					tint.setFill(Color.color(1, 0.35, 0.2, lightTheme ? 0.28 : 0.38));
+					square.getChildren().add(tint);
 				}
 
-				if (localGame != null) { // if game exists
-					Piece piece = localGame.board.getPiece(boardRow, boardCol); // get piece
-					if (piece != null) { // if piece exists
-						Circle circle = new Circle(SQUARE_SIZE / 2.0 - 6); // piece circle
-						if (piece.color.equals("red")) { // orange piece
-							circle.setFill(Color.web("#F9A186")); // orange color
-						} else { // blue piece
-							circle.setFill(Color.web("#147493")); // blue color
-						}
-						square.getChildren().add(circle); // add piece
+				boolean isSelected = boardRow == selectedRow && boardCol == selectedCol;
+				if (isSelected) {
+					Circle ring = new Circle(squareSize / 2.0 - 4);
+					ring.setFill(Color.TRANSPARENT);
+					ring.setStroke(lightTheme ? Color.web("#2a2a2a") : Color.web("#8a8a8a"));
+					ring.setStrokeWidth(2);
+					square.getChildren().add(ring);
+				}
 
-						if (piece.isKing) { // if king
-							Text k = new Text("K"); // king label
-							k.setFill(Color.WHITE); // white text
-							k.setFont(Font.font("Arial", FontWeight.BOLD, 16)); // bold
-							square.getChildren().add(k); // add on top
+				boolean isValidDest = false;
+				for (int[] dest : validDestinations) {
+					if (dest[0] == boardRow && dest[1] == boardCol) {
+						isValidDest = true;
+						break;
+					}
+				}
+				if (isValidDest) {
+					Circle dot = new Circle(Math.max(5, squareSize * 0.14));
+					dot.setMouseTransparent(true);
+					dot.setFill(lightTheme ? Color.web("#3a3a3a", 0.8) : Color.web("#5a5a5a", 0.9));
+					square.getChildren().add(dot);
+				}
+
+				if (localGame != null) {
+					Piece piece = localGame.board.getPiece(boardRow, boardCol);
+					if (piece != null) {
+						Circle circle = new Circle(squareSize / 2.0 - 6);
+						Color base = piece.color.equals("red") ? pieceRed() : pieceBlue();
+						styleFlatCheckerPiece(circle, base);
+						square.getChildren().add(circle);
+
+						if (piece.isKing) {
+							Text k = new Text("K");
+							k.setFill(Color.WHITE);
+							k.setFont(Font.font("DM Sans", FontWeight.BOLD, Math.max(10, squareSize * 0.28)));
+							square.getChildren().add(k);
 						}
 					}
 				}
 
-				final int r = boardRow; // board row for click handler
-				final int c = boardCol; // board col for click handler
-				square.setOnMouseClicked(e -> onSquareClicked(r, c)); // click handler
-				boardGrid.add(square, visualCol + 1, visualRow + 1); // add to grid
+				final int r = boardRow;
+				final int c = boardCol;
+				square.setOnMouseClicked(e -> onSquareClicked(r, c));
+				boardGrid.add(square, visualCol + 1, visualRow + 1);
 			}
 		}
-		if (localGame != null && turnLabel != null) { // update turn label
-			if (localGame.currentPlayer.equals(myColor)) { // my turn
-				if (!captureSources.isEmpty()) { // mandatory captures exist
-					turnLabel.setText("Your Turn — Capture Required!"); // warn player
-					turnLabel.setTextFill(Color.ORANGE); // orange to match piece highlights
+		if (localGame != null && turnLabel != null) {
+			if (spectating) {
+				String t = localGame.currentPlayer.equals("red") ? "Red" : "Black";
+				turnLabel.setText(t + "'s turn");
+				turnLabel.setTextFill(lightTheme ? Color.web("#5a4d42") : Color.web("#a8a8a8"));
+			} else if (localGame.currentPlayer.equals(myColor)) {
+				if (!captureSources.isEmpty()) {
+					turnLabel.setText("Your Turn — Capture Required!");
+					setTurnStyle(true, true);
 				} else {
-					turnLabel.setText("Your Turn"); // normal turn
-					turnLabel.setTextFill(Color.GREEN); // green
+					turnLabel.setText("Your Turn");
+					setTurnStyle(true, false);
 				}
-			} else { // opponent's turn
-				turnLabel.setText("Opponent's Turn"); // show opponent's turn
-				turnLabel.setTextFill(Color.GRAY); // gray
+			} else {
+				turnLabel.setText("Opponent's Turn");
+				setTurnStyle(false, false);
 			}
 		}
 	}
 
-	private void onSquareClicked(int row, int col) { // handle board click
-		if (localGame == null) return; // no game yet
-		if (!localGame.currentPlayer.equals(myColor)) return; // not my turn
+	private void onSquareClicked(int row, int col) {
+		if (spectating) return;
+		if (localGame == null) return;
+		if (!localGame.currentPlayer.equals(myColor)) return;
 
-		Piece piece = localGame.board.getPiece(row, col); // get clicked piece
+		Piece piece = localGame.board.getPiece(row, col);
 
-		if (selectedRow == -1) { // no piece selected yet
-			if (piece != null && piece.color.equals(myColor)) { // clicked my piece
-				selectedRow = row; // select it
-				selectedCol = col; // select it
-				validDestinations.clear(); // clear old destinations
-				for (Move m : localGame.getValidMoves(myColor)) { // get all valid moves
-					if (m.fromRow == row && m.fromCol == col) { // filter for selected piece
-						validDestinations.add(new int[]{m.toRow, m.toCol}); // save destination
+		if (selectedRow == -1) {
+			if (piece != null && piece.color.equals(myColor)) {
+				selectedRow = row;
+				selectedCol = col;
+				validDestinations.clear();
+				for (Move m : localGame.getValidMoves(myColor)) {
+					if (m.fromRow == row && m.fromCol == col) {
+						validDestinations.add(new int[]{m.toRow, m.toCol});
 					}
 				}
-				renderBoard(); // re-render to show highlights
+				renderBoard();
 			}
-		} else { // piece already selected
-			if (row == selectedRow && col == selectedCol) { // clicked the same piece again
-				selectedRow = -1; // deselect
-				selectedCol = -1; // deselect
-				validDestinations.clear(); // clear highlights
-				renderBoard(); // re-render
-				return; // done
-			}
-			if (piece != null && piece.color.equals(myColor)) { // clicked another own piece
-				selectedRow = row; // switch selection
-				selectedCol = col; // switch selection
-				validDestinations.clear(); // clear old destinations
-				for (Move m : localGame.getValidMoves(myColor)) { // get all valid moves
-					if (m.fromRow == row && m.fromCol == col) { // filter for selected piece
-						validDestinations.add(new int[]{m.toRow, m.toCol}); // save destination
+		} else {
+			if (piece != null && piece.color.equals(myColor)) {
+				selectedRow = row;
+				selectedCol = col;
+				validDestinations.clear();
+				for (Move m : localGame.getValidMoves(myColor)) {
+					if (m.fromRow == row && m.fromCol == col) {
+						validDestinations.add(new int[]{m.toRow, m.toCol});
 					}
 				}
-				renderBoard(); // re-render
-			} else { // clicked destination square
-				Move move = new Move(selectedRow, selectedCol, row, col); // create move
-				clientConnection.send(new Message(Message.MessageType.move, move)); // send to server
-				selectedRow = -1; // clear selection
-				selectedCol = -1; // clear selection
-				validDestinations.clear(); // clear destinations
+				renderBoard();
+			} else {
+				Move move = new Move(selectedRow, selectedCol, row, col);
+				clientConnection.send(new Message(Message.MessageType.move, move));
+				selectedRow = -1;
+				selectedCol = -1;
+				validDestinations.clear();
 			}
 		}
 	}
 
-	private void sendChat(String text, TextField input) { // send a chat message
-		if (!text.trim().isEmpty()) { // if not empty
-			clientConnection.send(new Message(Message.MessageType.chat, text)); // send to server
-			input.clear(); // clear input field
+	private void sendChat(String text, TextField input) {
+		if (!text.trim().isEmpty()) {
+			clientConnection.send(new Message(Message.MessageType.chat, text));
+			input.clear();
 		}
 	}
 
-	private void showDrawDialog() { // show draw offer confirmation
-		Stage dialog = new Stage(); // new window
-		dialog.initModality(Modality.APPLICATION_MODAL); // block main window
-		dialog.setTitle("Offer Draw"); // title
-
-		Label msg = new Label("Offer a draw to your opponent?"); // message
-		msg.setTextFill(Color.WHITE); // white text
-
-		Button confirm = new Button("Draw"); // confirm button
-		confirm.setStyle("-fx-background-color: #147493; -fx-text-fill: white;"); // blue
-		confirm.setOnAction(e -> { // on confirm
-			clientConnection.send(new Message(Message.MessageType.draw_offer, null)); // send offer
-			dialog.close(); // close dialog
-		});
-
-		Button cancel = new Button("Cancel"); // cancel button
-		cancel.setStyle("-fx-background-color: #3c3c3c; -fx-text-fill: white;"); // dark
-		cancel.setOnAction(e -> dialog.close()); // close on cancel
-
-		HBox buttons = new HBox(10, cancel, confirm); // button row
-		buttons.setAlignment(Pos.CENTER); // center
-		VBox layout = new VBox(20, msg, buttons); // dialog layout
-		layout.setAlignment(Pos.CENTER); // center
-		layout.setPadding(new Insets(20)); // padding
-		layout.setStyle("-fx-background-color: #2b2b2b;"); // dark background
-
-		dialog.setScene(new Scene(layout, 300, 150)); // set scene
-		dialog.show(); // show dialog
+	private void styleDialog(Scene sc) {
+		applyTheme(sc);
 	}
 
-	private void showResignDialog() { // show resign confirmation
-		Stage dialog = new Stage(); // new window
-		dialog.initModality(Modality.APPLICATION_MODAL); // block main window
-		dialog.setTitle("Resign"); // title
+	private void showDrawDialog() {
+		if (spectating) return;
+		Stage dialog = new Stage();
+		dialog.initModality(Modality.APPLICATION_MODAL);
+		dialog.setTitle("Offer Draw");
 
-		Label msg = new Label("Are you sure you want to resign?"); // message
-		msg.setTextFill(Color.WHITE); // white text
+		VBox layout = new VBox(18);
+		layout.getStyleClass().add("dialog-root");
+		layout.setAlignment(Pos.CENTER);
 
-		Button confirm = new Button("Resign"); // confirm button
-		confirm.setStyle("-fx-background-color: #8B0000; -fx-text-fill: white;"); // red
-		confirm.setOnAction(e -> { // on confirm
-			clientConnection.send(new Message(Message.MessageType.resign, null)); // send resign
-			dialog.close(); // close dialog
+		Label msg = new Label("Offer a draw to your opponent?");
+		msg.getStyleClass().add("dialog-message");
+
+		Button confirm = new Button("Draw");
+		confirm.getStyleClass().add("btn-primary");
+		confirm.setOnAction(e -> {
+			clientConnection.send(new Message(Message.MessageType.draw_offer, null));
+			dialog.close();
 		});
 
-		Button cancel = new Button("Cancel"); // cancel button
-		cancel.setStyle("-fx-background-color: #3c3c3c; -fx-text-fill: white;"); // dark
-		cancel.setOnAction(e -> dialog.close()); // close on cancel
+		Button cancel = new Button("Cancel");
+		cancel.getStyleClass().add("btn-secondary");
+		cancel.setOnAction(e -> dialog.close());
 
-		HBox buttons = new HBox(10, cancel, confirm); // button row
-		buttons.setAlignment(Pos.CENTER); // center
-		VBox layout = new VBox(20, msg, buttons); // dialog layout
-		layout.setAlignment(Pos.CENTER); // center
-		layout.setPadding(new Insets(20)); // padding
-		layout.setStyle("-fx-background-color: #2b2b2b;"); // dark background
+		HBox buttons = new HBox(10, cancel, confirm);
+		buttons.setAlignment(Pos.CENTER);
+		layout.getChildren().addAll(msg, buttons);
 
-		dialog.setScene(new Scene(layout, 320, 150)); // set scene
-		dialog.show(); // show dialog
+		Scene sc = new Scene(layout, 320, 160);
+		styleDialog(sc);
+		dialog.setScene(sc);
+		dialog.show();
 	}
 
-	private void handleMessage(Message msg) { // process incoming server messages
-		switch (msg.type) { // check message type
+	private void showResignDialog() {
+		if (spectating) return;
+		Stage dialog = new Stage();
+		dialog.initModality(Modality.APPLICATION_MODAL);
+		dialog.setTitle("Resign");
 
-			case username_ok: // username accepted
-				primaryStage.setScene(sceneMap.get("waiting")); // go to waiting screen
+		VBox layout = new VBox(18);
+		layout.getStyleClass().add("dialog-root");
+		layout.setAlignment(Pos.CENTER);
+
+		Label msg = new Label("Are you sure you want to resign?");
+		msg.getStyleClass().add("dialog-message");
+
+		Button confirm = new Button("Resign");
+		confirm.getStyleClass().add("btn-danger");
+		confirm.setOnAction(e -> {
+			clientConnection.send(new Message(Message.MessageType.resign, null));
+			dialog.close();
+		});
+
+		Button cancel = new Button("Cancel");
+		cancel.getStyleClass().add("btn-secondary");
+		cancel.setOnAction(e -> dialog.close());
+
+		HBox buttons = new HBox(10, cancel, confirm);
+		buttons.setAlignment(Pos.CENTER);
+		layout.getChildren().addAll(msg, buttons);
+
+		Scene sc = new Scene(layout, 340, 170);
+		styleDialog(sc);
+		dialog.setScene(sc);
+		dialog.show();
+	}
+
+	private void handleMessage(Message msg) {
+		switch (msg.type) {
+
+			case auth_ok:
+				myRating = (Integer) msg.data;
+				lobbyRatingLabel.setText("Rating: " + myRating + "  —  " + myUsername);
+				clientConnection.send(new Message(Message.MessageType.list_games, null));
+				primaryStage.setScene(sceneMap.get("lobby"));
+				syncThemeToggleLabel(sceneMap.get("lobby").getRoot());
 				break;
 
-			case username_taken: // username already in use
-				Alert alert = new Alert(Alert.AlertType.ERROR); // error dialog
-				alert.setTitle("Username Taken"); // title
-				alert.setContentText("That username is already taken. Try another."); // message
-				alert.show(); // show dialog
+			case auth_fail:
+				Alert a = new Alert(Alert.AlertType.ERROR);
+				a.setTitle("Account");
+				a.setContentText((String) msg.data);
+				a.show();
 				break;
 
-			case game_start: // game is starting
-				Object[] data = (Object[]) msg.data; // unpack data
-				String[] info = (String[]) data[0]; // get player info
-				opponentUsername = info[0]; // set opponent name
-				myColor = info[1]; // set my color
-				flipped = myColor.equals("black"); // blue player sees flipped board
-				localGame = new CheckersGame(myUsername, opponentUsername); // create local game
-				localGame.board = (Board) data[1]; // set board from server
-				moveCount = 0; // reset move counter for new game
-				sceneMap.put("game", createGameScene()); // create game scene
-				primaryStage.setScene(sceneMap.get("game")); // switch to game scene
+			case games_list:
+				@SuppressWarnings("unchecked")
+				ArrayList<GameListEntry> entries = (ArrayList<GameListEntry>) msg.data;
+				gamesListView.getItems().clear();
+				if (entries != null) {
+					gamesListView.getItems().addAll(entries);
+				}
 				break;
 
-			case move: // server sent updated board + move
-				Object[] moveData = (Object[]) msg.data; // unpack move and board
-				Move lastMove = (Move) moveData[0]; // the move that was just made
-				localGame.board = (Board) moveData[1]; // update local board
-				String mover = localGame.currentPlayer; // capture who just moved before switching
-				localGame.currentPlayer = localGame.currentPlayer.equals("black") ? "red" : "black"; // switch turn
-				moveCount++; // increment move counter
-				String fromSquare = String.valueOf((char)('A' + lastMove.fromCol)) + (8 - lastMove.fromRow); // e.g. C6
-				String toSquare = String.valueOf((char)('A' + lastMove.toCol)) + (8 - lastMove.toRow); // e.g. D5
-				String moverLabel = mover.equals("red") ? "Orange" : "Blue"; // label for history
-				moveHistoryList.getItems().add(moveCount + ". " + moverLabel + ": " + fromSquare + "-" + toSquare); // add entry
-				moveHistoryList.scrollTo(moveHistoryList.getItems().size() - 1); // scroll to latest
-				renderBoard(); // re-render board
+			case spectator_fail:
+				Alert sf = new Alert(Alert.AlertType.ERROR);
+				sf.setTitle("Spectate");
+				sf.setContentText((String) msg.data);
+				sf.show();
 				break;
 
-			case invalid_move: // server rejected move
-				Alert invalidAlert = new Alert(Alert.AlertType.WARNING); // popup warning
-				invalidAlert.setTitle("Invalid Move"); // title
-				String invalidMsg = "That move is not allowed. Try again."; // default message
-				if (localGame != null) { // check if capture is forcing the issue
-					ArrayList<Move> vm = localGame.getValidMoves(myColor); // get valid moves
-					if (!vm.isEmpty() && !vm.get(0).capturedPositions.isEmpty()) { // jumps exist
-						invalidMsg = "A capture is available! You must move an orange-highlighted piece."; // explain
+			case spectator_ok:
+				spectating = true;
+				Object[] sp = (Object[]) msg.data;
+				Board sb = (Board) sp[0];
+				int[] srat = (int[]) sp[1];
+				int[] st = (int[]) sp[2];
+				String sRed = (String) sp[3];
+				String sBlack = (String) sp[4];
+				String sCur = (String) sp[5];
+				localGame = new CheckersGame(sRed, sBlack);
+				localGame.board = sb;
+				localGame.currentPlayer = sCur;
+				redTimeLeft = st[0];
+				blackTimeLeft = st[1];
+				flipped = false;
+				opponentLabelText = sBlack + " (" + srat[1] + ")";
+				youLabelText = sRed + " (" + srat[0] + ")";
+				sceneMap.put("game", createGameScene());
+				primaryStage.setScene(sceneMap.get("game"));
+				syncThemeToggleLabel(sceneMap.get("game").getRoot());
+				break;
+
+			case username_ok:
+				primaryStage.setScene(sceneMap.get("waiting"));
+				syncThemeToggleLabel(sceneMap.get("waiting").getRoot());
+				break;
+
+			case username_taken:
+				Alert alert = new Alert(Alert.AlertType.ERROR);
+				alert.setTitle("Username Taken");
+				alert.setContentText("That username is already taken. Try another.");
+				alert.show();
+				break;
+
+			case game_start:
+				spectating = false;
+				Object[] data = (Object[]) msg.data;
+				String[] info = (String[]) data[0];
+				String oppPlain = info[0];
+				myColor = info[1];
+				opponentUsername = oppPlain;
+				flipped = myColor.equals("black");
+				int[] ratings = (int[]) data[2];
+				int[] times = (int[]) data[3];
+				int oppR = myColor.equals("red") ? ratings[1] : ratings[0];
+				int meR = myColor.equals("red") ? ratings[0] : ratings[1];
+				opponentLabelText = oppPlain + " (" + oppR + ")";
+				youLabelText = myUsername + " (" + meR + ")";
+				localGame = new CheckersGame(
+						myColor.equals("red") ? myUsername : oppPlain,
+						myColor.equals("black") ? myUsername : oppPlain
+				);
+				localGame.board = (Board) data[1];
+				redTimeLeft = times[0];
+				blackTimeLeft = times[1];
+				sceneMap.put("game", createGameScene());
+				primaryStage.setScene(sceneMap.get("game"));
+				syncThemeToggleLabel(sceneMap.get("game").getRoot());
+				break;
+
+			case move:
+				if (localGame == null) {
+					break;
+				}
+				Object[] mv = (Object[]) msg.data;
+				localGame.board = (Board) mv[0];
+				redTimeLeft = ((Number) mv[1]).intValue();
+				blackTimeLeft = ((Number) mv[2]).intValue();
+				localGame.currentPlayer = localGame.currentPlayer.equals("black") ? "red" : "black";
+				if (mv.length >= 4 && mv[3] instanceof String) {
+					appendMoveHistoryText((String) mv[3]);
+				}
+				updateTimerLabels();
+				renderBoard();
+				break;
+
+			case timer_sync:
+				int[] ts = (int[]) msg.data;
+				redTimeLeft = ts[0];
+				blackTimeLeft = ts[1];
+				updateTimerLabels();
+				break;
+
+			case rating_update:
+				myRating = (Integer) msg.data;
+				if (lobbyRatingLabel != null) {
+					lobbyRatingLabel.setText("Rating: " + myRating + "  —  " + myUsername);
+				}
+				break;
+
+			case invalid_move:
+				Alert invalidAlert = new Alert(Alert.AlertType.WARNING);
+				invalidAlert.setTitle("Invalid Move");
+				String invalidMsg = "That move is not allowed. Try again.";
+				if (!spectating && localGame != null && myColor != null) {
+					ArrayList<Move> vm = localGame.getValidMoves(myColor);
+					if (!vm.isEmpty() && !vm.get(0).capturedPositions.isEmpty()) {
+						invalidMsg = "A capture is available! You must move a highlighted piece.";
 					}
 				}
-				invalidAlert.setContentText(invalidMsg); // message
-				invalidAlert.show(); // show popup
+				invalidAlert.setContentText(invalidMsg);
+				invalidAlert.show();
 				break;
 
-			case game_over: // game ended
-				String result = (String) msg.data; // get result
-				showGameOverDialog(result); // show result dialog
+			case game_over:
+				String result = (String) msg.data;
+				showGameOverDialog(result);
 				break;
 
-			case chat: // chat message received
-				chatList.getItems().add((String) msg.data); // add to chat list
+			case chat:
+				if (chatList != null) {
+					chatList.getItems().add((String) msg.data);
+				}
 				break;
 
-			case draw_offer: // opponent offered draw
-				showDrawResponseDialog(); // show accept/decline dialog
+			case draw_offer:
+				if (!spectating && localGame != null) {
+					showDrawResponseDialog();
+				}
 				break;
 
-			case draw_decline: // opponent declined draw
-				chatList.getItems().add("Your draw offer was declined."); // notify in chat
+			case draw_decline:
+				if (chatList != null) {
+					chatList.getItems().add("Your draw offer was declined.");
+				}
 				break;
 
-			case waiting: // waiting for opponent
-				primaryStage.setScene(sceneMap.get("waiting")); // show waiting screen
+			case waiting:
+				primaryStage.setScene(sceneMap.get("waiting"));
+				syncThemeToggleLabel(sceneMap.get("waiting").getRoot());
+				clientConnection.send(new Message(Message.MessageType.list_games, null));
 				break;
 
-			default: // unknown message
+			default:
 				break;
 		}
 	}
 
-	private void showDrawResponseDialog() { // respond to a draw offer
-		Stage dialog = new Stage(); // new window
-		dialog.initModality(Modality.APPLICATION_MODAL); // block main window
-		dialog.setTitle("Draw Offer"); // title
+	private void showDrawResponseDialog() {
+		Stage dialog = new Stage();
+		dialog.initModality(Modality.APPLICATION_MODAL);
+		dialog.setTitle("Draw Offer");
 
-		Label msg = new Label("Your opponent offered a draw."); // message
-		msg.setTextFill(Color.WHITE); // white text
+		VBox layout = new VBox(18);
+		layout.getStyleClass().add("dialog-root");
+		layout.setAlignment(Pos.CENTER);
 
-		Button accept = new Button("Accept"); // accept button
-		accept.setStyle("-fx-background-color: #147493; -fx-text-fill: white;"); // blue
-		accept.setOnAction(e -> { // on accept
-			clientConnection.send(new Message(Message.MessageType.draw_accept, null)); // send accept
-			dialog.close(); // close dialog
+		Label msg = new Label("Your opponent offered a draw.");
+		msg.getStyleClass().add("dialog-message");
+
+		Button accept = new Button("Accept");
+		accept.getStyleClass().add("btn-primary");
+		accept.setOnAction(e -> {
+			clientConnection.send(new Message(Message.MessageType.draw_accept, null));
+			dialog.close();
 		});
 
-		Button decline = new Button("Decline"); // decline button
-		decline.setStyle("-fx-background-color: #8B0000; -fx-text-fill: white;"); // red
-		decline.setOnAction(e -> { // on decline
-			clientConnection.send(new Message(Message.MessageType.draw_decline, null)); // send decline
-			dialog.close(); // close dialog
+		Button decline = new Button("Decline");
+		decline.getStyleClass().add("btn-danger");
+		decline.setOnAction(e -> {
+			clientConnection.send(new Message(Message.MessageType.draw_decline, null));
+			dialog.close();
 		});
 
-		HBox buttons = new HBox(10, decline, accept); // button row
-		buttons.setAlignment(Pos.CENTER); // center
-		VBox layout = new VBox(20, msg, buttons); // dialog layout
-		layout.setAlignment(Pos.CENTER); // center
-		layout.setPadding(new Insets(20)); // padding
-		layout.setStyle("-fx-background-color: #2b2b2b;"); // dark background
+		HBox buttons = new HBox(10, decline, accept);
+		buttons.setAlignment(Pos.CENTER);
+		layout.getChildren().addAll(msg, buttons);
 
-		dialog.setScene(new Scene(layout, 300, 150)); // set scene
-		dialog.show(); // show dialog
+		Scene sc = new Scene(layout, 320, 170);
+		styleDialog(sc);
+		dialog.setScene(sc);
+		dialog.show();
 	}
 
-	private void showGameOverDialog(String result) { // show game over screen
-		Stage dialog = new Stage(); // new window
-		dialog.initModality(Modality.APPLICATION_MODAL); // block main window
-		dialog.setTitle("Game Over"); // title
+	private void returnToLobbyAfterGame() {
+		localGame = null;
+		selectedRow = -1;
+		selectedCol = -1;
+		validDestinations.clear();
+		opponentUsername = null;
+		myColor = null;
+		flipped = false;
+		spectating = false;
+		opponentLabelText = "";
+		youLabelText = "";
+		redTimeLeft = GameSessionMirror.START_SECONDS;
+		blackTimeLeft = GameSessionMirror.START_SECONDS;
+		boardGrid = null;
+		boardWoodFrame = null;
+		boardCenterStack = null;
+		turnLabel = null;
+		chatList = null;
+		moveHistoryList = null;
+		opponentTimerLabel = null;
+		myTimerLabel = null;
+		if (lobbyRatingLabel != null && myUsername != null) {
+			lobbyRatingLabel.setText("Rating: " + myRating + "  —  " + myUsername);
+		}
+		primaryStage.setScene(sceneMap.get("lobby"));
+		syncThemeToggleLabel(sceneMap.get("lobby").getRoot());
+		clientConnection.send(new Message(Message.MessageType.list_games, null));
+	}
 
-		String text = result.equals("draw") ? "Game drawn!" : // draw message
-				result.equals(myUsername) ? "You win!" : "You lose!"; // win/lose message
+	private void showGameOverDialog(String result) {
+		Stage dialog = new Stage();
+		dialog.initModality(Modality.APPLICATION_MODAL);
+		dialog.setTitle("Game Over");
 
-		Label msg = new Label(text); // result label
-		msg.setFont(Font.font("Arial", FontWeight.BOLD, 24)); // large bold font
-		msg.setTextFill(Color.WHITE); // white text
+		String text;
+		if (spectating) {
+			text = result.equals("draw") ? "Game drawn." : result + " wins.";
+		} else {
+			text = result.equals("draw") ? "Game drawn!" :
+					result.equals(myUsername) ? "You win!" : "You lose!";
+		}
 
-		Button playAgain = new Button("Play Again"); // play again button
-		playAgain.setStyle("-fx-background-color: #147493; -fx-text-fill: white;"); // blue
-		playAgain.setOnAction(e -> { // on click
-			clientConnection.send(new Message(Message.MessageType.play_again, null)); // request replay
-			primaryStage.setScene(sceneMap.get("waiting")); // show waiting screen
-			dialog.close(); // close dialog
+		VBox layout = new VBox(20);
+		layout.getStyleClass().add("dialog-root");
+		layout.setAlignment(Pos.CENTER);
+
+		Label msg = new Label(text);
+		msg.getStyleClass().add("title-lg");
+		msg.setWrapText(true);
+
+		Button lobbyBtn = new Button("Return to Lobby");
+		lobbyBtn.getStyleClass().add("btn-primary");
+		lobbyBtn.setOnAction(e -> {
+			dialog.close();
+			returnToLobbyAfterGame();
 		});
 
-		Button quit = new Button("Quit"); // quit button
-		quit.setStyle("-fx-background-color: #3c3c3c; -fx-text-fill: white;"); // dark
-		quit.setOnAction(e -> { // on click
-			Platform.exit(); // exit app
-			System.exit(0); // exit process
-		});
+		HBox buttons = new HBox(10, lobbyBtn);
+		buttons.setAlignment(Pos.CENTER);
+		layout.getChildren().addAll(msg, buttons);
 
-		HBox buttons = new HBox(10, quit, playAgain); // button row
-		buttons.setAlignment(Pos.CENTER); // center
-		VBox layout = new VBox(20, msg, buttons); // dialog layout
-		layout.setAlignment(Pos.CENTER); // center
-		layout.setPadding(new Insets(20)); // padding
-		layout.setStyle("-fx-background-color: #2b2b2b;"); // dark background
-
-		dialog.setScene(new Scene(layout, 300, 200)); // set scene
-		dialog.show(); // show dialog
+		Scene sc = new Scene(layout, 340, 220);
+		styleDialog(sc);
+		dialog.setScene(sc);
+		dialog.show();
 	}
 }

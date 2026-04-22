@@ -11,7 +11,7 @@ class MyTest {
 
 	@Test
 	void test() {
-		fail("Not yet implemented");
+		assertEquals(1200, UserStore.computeNewRating(1200, 1200, 0.5));
 	}
 
 }

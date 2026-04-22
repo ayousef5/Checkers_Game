@@ -4,21 +4,33 @@ public class Message implements Serializable { // sent over sockets
     static final long serialVersionUID = 42L; // required for serialization
 
     public enum MessageType { // all message types
-        username,        // client sends username
-        username_ok,     // server accepts username
-        username_taken,  // username already in use
-        waiting,         // client is in queue
-        game_start,      // game is starting
-        move,            // a move was made
-        invalid_move,    // move was illegal
-        game_over,       // game has ended
-        chat,            // chat message
-        play_again,      // request to replay
-        play_again_ack,  // replay acknowledged
-        draw_offer,      // draw offered
-        draw_accept,     // draw accepted
-        draw_decline,    // draw declined
-        resign           // player resigned
+        register,        // client register String[] user pass
+        login,           // client login String[] user pass
+        auth_ok,         // success Integer rating
+        auth_fail,       // String reason
+        join_queue,      // enter matchmaking
+        list_games,      // request lobby game list
+        games_list,      // java.util.ArrayList<GameListEntry>
+        spectator_join,  // Integer sessionId
+        spectator_ok,    // same payload shape as game start for spectator
+        spectator_fail,  // String reason
+        timer_sync,      // int[] {redSec,blackSec}
+        rating_update,   // Integer newRating
+        username,        // legacy unused
+        username_ok,
+        username_taken,
+        waiting,
+        game_start,
+        move,
+        invalid_move,
+        game_over,
+        chat,
+        play_again,
+        play_again_ack,
+        draw_offer,
+        draw_accept,
+        draw_decline,
+        resign
     }
 
     public MessageType type; // message type
