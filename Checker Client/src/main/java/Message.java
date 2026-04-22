@@ -1,9 +1,9 @@
-import java.io.Serializable; // needed for network transfer
+import java.io.Serializable;
 
-public class Message implements Serializable { // sent over sockets
-    static final long serialVersionUID = 42L; // required for serialization
+public class Message implements Serializable {
+    static final long serialVersionUID = 42L;
 
-    public enum MessageType { // all message types
+    public enum MessageType {
         register,
         login,
         auth_ok,
@@ -43,11 +43,12 @@ public class Message implements Serializable { // sent over sockets
         online_status
     }
 
-    public MessageType type; // message type
-    public Object data;      // payload (String, Move, Board, etc.)
+    public MessageType type;
+    public Object data;
 
-    public Message(MessageType type, Object data) { // constructor
-        this.type = type; // set type
-        this.data = data; // set payload
+    // wire message
+    public Message(MessageType type, Object data) {
+        this.type = type;
+        this.data = data;
     }
 }

@@ -1,16 +1,14 @@
 import java.util.ArrayList;
 import java.util.Comparator;
 
-/**
- * Minimax with simple evaluation; forced capture is already enforced in {@link CheckersGame#getValidMoves}.
- */
 public final class CheckersAI {
 
-    public static final int MINIMAX_DEPTH = 4; // at least 3 as required
+    public static final int MINIMAX_DEPTH = 4;
 
     private CheckersAI() {
     }
 
+    // root move search
     public static Move chooseMove(CheckersGame state, String aiColor) {
         ArrayList<Move> moves = state.getValidMoves(aiColor);
         if (moves.isEmpty()) {
@@ -30,6 +28,7 @@ public final class CheckersAI {
         return best != null ? best : moves.get(0);
     }
 
+    // minimax search
     private static int minimax(CheckersGame state, int depth, String aiColor, String toMove) {
         if (state.gameOver) {
             return terminalScore(state, aiColor);
@@ -64,6 +63,7 @@ public final class CheckersAI {
         }
     }
 
+    // terminal or cutoff
     private static int terminalScore(CheckersGame g, String aiColor) {
         if (!g.gameOver) {
             return evaluate(g, aiColor);
@@ -77,6 +77,7 @@ public final class CheckersAI {
         return iWon ? 1_000_000 : -1_000_000;
     }
 
+    // static evaluation
     private static int evaluate(CheckersGame g, String forColor) {
         if (g.gameOver) {
             return terminalScore(g, forColor);
@@ -105,6 +106,7 @@ public final class CheckersAI {
                 + 2 * (myAdv - opAdv);
     }
 
+    // try jumps first
     private static ArrayList<Move> orderMoves(ArrayList<Move> moves) {
         ArrayList<Move> out = new ArrayList<>(moves);
         out.sort(Comparator

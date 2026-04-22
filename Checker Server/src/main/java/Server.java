@@ -6,9 +6,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.function.Consumer;
 
-/**
- * See {@link UserStore} for user line format, friends, and win/loss/draws.
- */
 public class Server {
 
     int count = 1;
@@ -18,7 +15,6 @@ public class Server {
     TheServer server;
     private Consumer<Serializable> callback;
     private final UserStore userStore = new UserStore("users.txt");
-    /** Usernames with an authenticated, active connection. */
     private final Set<String> connectedUsernames = new HashSet<>();
     private final Object connectLock = new Object();
 
@@ -128,7 +124,7 @@ public class Server {
             synchronized (connectLock) {
                 connectedUsernames.remove(u);
             }
-            broadcastOnlineStatusToFriendsOf(u, false);
+            pushFriendOnline(u, false);
         }
         clients.remove(client);
         waitingQueue.remove(client);
@@ -165,6 +161,7 @@ public class Server {
         return null;
     }
 
+    // track login and tell friends
     private void addConnectedUser(String name) {
         if (name == null) {
             return;
@@ -172,13 +169,11 @@ public class Server {
         synchronized (connectLock) {
             connectedUsernames.add(name);
         }
-        broadcastOnlineStatusToFriendsOf(name, true);
+        pushFriendOnline(name, true);
     }
 
-    /**
-     * Notifies all connected friends of this user that their online status changed.
-     */
-    private void broadcastOnlineStatusToFriendsOf(String u, boolean online) {
+    // friend list presence push
+    private void pushFriendOnline(String u, boolean online) {
         if (u == null) {
             return;
         }

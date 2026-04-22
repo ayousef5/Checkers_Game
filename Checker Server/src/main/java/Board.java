@@ -1,16 +1,17 @@
-import java.io.Serializable; // needed for network transfer
+import java.io.Serializable;
 
-public class Board implements Serializable { // sent over sockets
-    static final long serialVersionUID = 42L; // required for serialization
+public class Board implements Serializable {
+    static final long serialVersionUID = 42L;
 
-    public Piece[][] grid; // 8x8 grid of pieces, null means empty square
+    public Piece[][] grid;
 
-    public Board() { // constructor
-        grid = new Piece[8][8]; // create empty 8x8 board
-        initializeBoard(); // place pieces in starting positions
+    // standard start
+    public Board() {
+        grid = new Piece[8][8];
+        initializeBoard();
     }
 
-    /** Full deep copy; independent pieces. */
+    // deep copy
     public static Board copyOf(Board other) {
         Board b = new Board();
         for (int r = 0; r < 8; r++) {
@@ -27,42 +28,44 @@ public class Board implements Serializable { // sent over sockets
         return b;
     }
 
-    private void initializeBoard() { // place pieces on dark squares
-        for (int row = 0; row < 3; row++) { // black pieces on rows 0-2
-            for (int col = 0; col < 8; col++) { // check every column
-                if ((row + col) % 2 != 0) { // only dark squares
-                    grid[row][col] = new Piece("black", row, col); // place black piece
+    // dark square setup
+    private void initializeBoard() {
+        for (int row = 0; row < 3; row++) {
+            for (int col = 0; col < 8; col++) {
+                if ((row + col) % 2 != 0) {
+                    grid[row][col] = new Piece("black", row, col);
                 }
             }
         }
-        for (int row = 5; row < 8; row++) { // red pieces on rows 5-7
-            for (int col = 0; col < 8; col++) { // check every column
-                if ((row + col) % 2 != 0) { // only dark squares
-                    grid[row][col] = new Piece("red", row, col); // place red piece
+        for (int row = 5; row < 8; row++) {
+            for (int col = 0; col < 8; col++) {
+                if ((row + col) % 2 != 0) {
+                    grid[row][col] = new Piece("red", row, col);
                 }
             }
         }
     }
 
-    public Piece getPiece(int row, int col) { // get piece at position
-        return grid[row][col]; // return piece or null
+    public Piece getPiece(int row, int col) {
+        return grid[row][col];
     }
 
-    public void setPiece(int row, int col, Piece piece) { // place piece at position
-        grid[row][col] = piece; // set the square
-        if (piece != null) { // update piece's position if not null
-            piece.row = row; // update row
-            piece.col = col; // update col
+    public void setPiece(int row, int col, Piece piece) {
+        grid[row][col] = piece;
+        if (piece != null) {
+            piece.row = row;
+            piece.col = col;
         }
     }
 
-    public void removePiece(int row, int col) { // remove piece from position
-        grid[row][col] = null; // set square to empty
+    public void removePiece(int row, int col) {
+        grid[row][col] = null;
     }
 
-    public void movePiece(int fromRow, int fromCol, int toRow, int toCol) { // move piece
-        Piece piece = grid[fromRow][fromCol]; // get the piece
-        setPiece(toRow, toCol, piece); // place it at destination
-        removePiece(fromRow, fromCol); // clear original square
+    // relocate piece
+    public void movePiece(int fromRow, int fromCol, int toRow, int toCol) {
+        Piece piece = grid[fromRow][fromCol];
+        setPiece(toRow, toCol, piece);
+        removePiece(fromRow, fromCol);
     }
 }

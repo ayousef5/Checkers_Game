@@ -1,22 +1,22 @@
-import java.io.Serializable; // needed for network transfer
+import java.io.Serializable;
 
-public class Message implements Serializable { // sent over sockets
-    static final long serialVersionUID = 42L; // required for serialization
+public class Message implements Serializable {
+    static final long serialVersionUID = 42L;
 
-    public enum MessageType { // all message types
-        register,        // client register String[] user pass
-        login,           // client login String[] user pass
-        auth_ok,         // success Integer rating
-        auth_fail,       // String reason
-        join_queue,      // enter matchmaking
-        list_games,      // request lobby game list
-        games_list,      // java.util.ArrayList<GameListEntry>
-        spectator_join,  // Integer sessionId
-        spectator_ok,    // same payload shape as game start for spectator
-        spectator_fail,  // String reason
-        timer_sync,      // int[] {redSec,blackSec}
-        rating_update,   // Integer newRating
-        username,        // legacy unused
+    public enum MessageType {
+        register,
+        login,
+        auth_ok,
+        auth_fail,
+        join_queue,
+        list_games,
+        games_list,
+        spectator_join,
+        spectator_ok,
+        spectator_fail,
+        timer_sync,
+        rating_update,
+        username,
         username_ok,
         username_taken,
         waiting,
@@ -40,15 +40,15 @@ public class Message implements Serializable { // sent over sockets
         friend_incoming,
         friend_error,
         friend_notice,
-        /** data: Object[] { String username, Boolean online } */
         online_status
     }
 
-    public MessageType type; // message type
-    public Object data;      // payload (String, Move, Board, etc.)
+    public MessageType type;
+    public Object data;
 
-    public Message(MessageType type, Object data) { // constructor
-        this.type = type; // set type
-        this.data = data; // set payload
+    // wire message
+    public Message(MessageType type, Object data) {
+        this.type = type;
+        this.data = data;
     }
 }

@@ -1,24 +1,25 @@
-import java.util.ArrayList; // needed for lists
+import java.util.ArrayList;
 
-public class CheckersGame { // handles all game logic
+public class CheckersGame {
 
-    public Board board; // the game board
-    public String currentPlayer; // "red" or "black"
-    public String redPlayer; // red player's username
-    public String blackPlayer; // black player's username
-    public boolean gameOver; // true if game has ended
-    public String winner; // username of winner, null if ongoing
+    public Board board;
+    public String currentPlayer;
+    public String redPlayer;
+    public String blackPlayer;
+    public boolean gameOver;
+    public String winner;
 
-    public CheckersGame(String redPlayer, String blackPlayer) { // constructor
-        this.board = new Board(); // create fresh board
-        this.redPlayer = redPlayer; // set red player
-        this.blackPlayer = blackPlayer; // set black player
-        this.currentPlayer = "black"; // black moves first
-        this.gameOver = false; // game is not over
-        this.winner = null; // no winner yet
+    // new game
+    public CheckersGame(String redPlayer, String blackPlayer) {
+        this.board = new Board();
+        this.redPlayer = redPlayer;
+        this.blackPlayer = blackPlayer;
+        this.currentPlayer = "black";
+        this.gameOver = false;
+        this.winner = null;
     }
 
-    /** Copy for AI search (independent board state). */
+    // state copy for search
     public CheckersGame copy() {
         CheckersGame c = new CheckersGame(redPlayer, blackPlayer);
         c.board = Board.copyOf(this.board);
@@ -28,120 +29,129 @@ public class CheckersGame { // handles all game logic
         return c;
     }
 
-    public ArrayList<Move> getValidMoves(String color) { // get all legal moves for a color
-        ArrayList<Move> moves = new ArrayList<>(); // list to return
-        ArrayList<Move> jumps = new ArrayList<>(); // jumps found
+    // legal moves for color
+    public ArrayList<Move> getValidMoves(String color) {
+        ArrayList<Move> moves = new ArrayList<>();
+        ArrayList<Move> jumps = new ArrayList<>();
 
-        for (int row = 0; row < 8; row++) { // check every row
-            for (int col = 0; col < 8; col++) { // check every column
-                Piece piece = board.getPiece(row, col); // get piece at square
-                if (piece != null && piece.color.equals(color)) { // if it belongs to current player
-                    jumps.addAll(getJumpsForPiece(piece)); // collect jumps
-                    moves.addAll(getMovesForPiece(piece)); // collect regular moves
+        for (int row = 0; row < 8; row++) {
+            for (int col = 0; col < 8; col++) {
+                Piece piece = board.getPiece(row, col);
+                if (piece != null && piece.color.equals(color)) {
+                    jumps.addAll(getJumpsForPiece(piece));
+                    moves.addAll(getMovesForPiece(piece));
                 }
             }
         }
 
-        if (!jumps.isEmpty()) return jumps; // jumps are mandatory
-        return moves; // return regular moves if no jumps
+        if (!jumps.isEmpty()) return jumps;
+        return moves;
     }
 
-    private ArrayList<Move> getMovesForPiece(Piece piece) { // get regular moves for one piece
-        ArrayList<Move> moves = new ArrayList<>(); // list to return
-        int[][] dirs = getDirections(piece); // get allowed directions
+    // simple step moves
+    private ArrayList<Move> getMovesForPiece(Piece piece) {
+        ArrayList<Move> moves = new ArrayList<>();
+        int[][] dirs = getDirections(piece);
 
-        for (int[] dir : dirs) { // check each direction
-            int newRow = piece.row + dir[0]; // calculate new row
-            int newCol = piece.col + dir[1]; // calculate new col
-            if (inBounds(newRow, newCol) && board.getPiece(newRow, newCol) == null) { // if empty
-                moves.add(new Move(piece.row, piece.col, newRow, newCol)); // valid move
+        for (int[] dir : dirs) {
+            int newRow = piece.row + dir[0];
+            int newCol = piece.col + dir[1];
+            if (inBounds(newRow, newCol) && board.getPiece(newRow, newCol) == null) {
+                moves.add(new Move(piece.row, piece.col, newRow, newCol));
             }
         }
-        return moves; // return found moves
+        return moves;
     }
 
-    private ArrayList<Move> getJumpsForPiece(Piece piece) { // get all jumps for one piece
-        ArrayList<Move> jumps = new ArrayList<>(); // list to return
+    // jump moves from piece
+    private ArrayList<Move> getJumpsForPiece(Piece piece) {
+        ArrayList<Move> jumps = new ArrayList<>();
         getJumpsRecursive(piece.row, piece.col, piece, new Move(piece.row, piece.col, piece.row, piece.col),
                 jumps, new boolean[8][8]);
-        return jumps; // return all jump chains found
+        return jumps;
     }
 
+    // multi jump dfs
     private void getJumpsRecursive(int row, int col, Piece piece, Move currentMove, ArrayList<Move> jumps,
-                                   boolean[][] captured) { // find multi-jumps
-        int[][] dirs = getDirections(piece); // get allowed directions
-        boolean foundJump = false; // track if any jump was found
+                                   boolean[][] captured) {
+        int[][] dirs = getDirections(piece);
+        boolean foundJump = false;
 
-        for (int[] dir : dirs) { // check each direction
-            int midRow = row + dir[0]; // middle square row
-            int midCol = col + dir[1]; // middle square col
-            int landRow = row + dir[0] * 2; // landing square row
-            int landCol = col + dir[1] * 2; // landing square col
+        for (int[] dir : dirs) {
+            int midRow = row + dir[0];
+            int midCol = col + dir[1];
+            int landRow = row + dir[0] * 2;
+            int landCol = col + dir[1] * 2;
 
-            if (!inBounds(landRow, landCol)) continue; // skip if out of bounds
-            Piece middle = board.getPiece(midRow, midCol); // get middle piece
-            if (middle == null || middle.color.equals(piece.color)) continue; // must be opponent
-            if (captured[midRow][midCol]) continue; // already captured this piece
-            if (board.getPiece(landRow, landCol) != null) continue; // landing must be empty
+            if (!inBounds(landRow, landCol)) continue;
+            Piece middle = board.getPiece(midRow, midCol);
+            if (middle == null || middle.color.equals(piece.color)) continue;
+            if (captured[midRow][midCol]) continue;
+            if (board.getPiece(landRow, landCol) != null) continue;
 
-            foundJump = true; // found a valid jump
-            captured[midRow][midCol] = true; // mark as captured
+            foundJump = true;
+            captured[midRow][midCol] = true;
 
-            Move nextMove = new Move(currentMove.fromRow, currentMove.fromCol, landRow, landCol); // build move
-            nextMove.capturedPositions.addAll(currentMove.capturedPositions); // carry over captures
-            nextMove.addCapture(midRow, midCol); // add this capture
+            Move nextMove = new Move(currentMove.fromRow, currentMove.fromCol, landRow, landCol);
+            nextMove.capturedPositions.addAll(currentMove.capturedPositions);
+            nextMove.addCapture(midRow, midCol);
 
-            getJumpsRecursive(landRow, landCol, piece, nextMove, jumps, captured); // continue chain
-            captured[midRow][midCol] = false; // unmark for backtracking
+            getJumpsRecursive(landRow, landCol, piece, nextMove, jumps, captured);
+            captured[midRow][midCol] = false;
         }
 
-        if (!foundJump && !currentMove.capturedPositions.isEmpty()) { // no more jumps available
-            jumps.add(currentMove); // add completed jump chain
+        if (!foundJump && !currentMove.capturedPositions.isEmpty()) {
+            jumps.add(currentMove);
         }
     }
 
-    public boolean isValidMove(Move move, String color) { // check if a move is legal
-        ArrayList<Move> valid = getValidMoves(color); // get all legal moves
-        for (Move m : valid) { // check each valid move
+    // list membership
+    public boolean isValidMove(Move move, String color) {
+        ArrayList<Move> valid = getValidMoves(color);
+        for (Move m : valid) {
             if (m.fromRow == move.fromRow && m.fromCol == move.fromCol &&
-                    m.toRow == move.toRow && m.toCol == move.toCol) { // if it matches
-                move.capturedPositions = m.capturedPositions; // copy captured positions
-                return true; // move is valid
+                    m.toRow == move.toRow && m.toCol == move.toCol) {
+                move.capturedPositions = m.capturedPositions;
+                return true;
             }
         }
-        return false; // move not found
+        return false;
     }
 
-    public void applyMove(Move move) { // apply a validated move to the board
-        board.movePiece(move.fromRow, move.fromCol, move.toRow, move.toCol); // move piece
+    // apply and switch turn
+    public void applyMove(Move move) {
+        board.movePiece(move.fromRow, move.fromCol, move.toRow, move.toCol);
 
-        for (int[] pos : move.capturedPositions) { // remove all captured pieces
-            board.removePiece(pos[0], pos[1]); // remove captured piece
+        for (int[] pos : move.capturedPositions) {
+            board.removePiece(pos[0], pos[1]);
         }
 
-        Piece piece = board.getPiece(move.toRow, move.toCol); // get moved piece
-        if (piece.color.equals("black") && move.toRow == 7) piece.isKing = true; // black kinged
-        if (piece.color.equals("red") && move.toRow == 0) piece.isKing = true; // red kinged
+        Piece piece = board.getPiece(move.toRow, move.toCol);
+        if (piece.color.equals("black") && move.toRow == 7) piece.isKing = true;
+        if (piece.color.equals("red") && move.toRow == 0) piece.isKing = true;
 
-        currentPlayer = currentPlayer.equals("black") ? "red" : "black"; // switch turns
+        currentPlayer = currentPlayer.equals("black") ? "red" : "black";
 
-        if (isGameOver()) { // check if game ended
-            gameOver = true; // mark game over
-            winner = currentPlayer.equals("black") ? redPlayer : blackPlayer; // set winner
+        if (isGameOver()) {
+            gameOver = true;
+            winner = currentPlayer.equals("black") ? redPlayer : blackPlayer;
         }
     }
 
-    public boolean isGameOver() { // check if current player has no moves
-        return getValidMoves(currentPlayer).isEmpty(); // no moves means game over
+    // no legal moves
+    public boolean isGameOver() {
+        return getValidMoves(currentPlayer).isEmpty();
     }
 
-    private int[][] getDirections(Piece piece) { // get movement directions for a piece
-        if (piece.isKing) return new int[][]{{-1, -1}, {-1, 1}, {1, -1}, {1, 1}}; // all 4 dirs
-        if (piece.color.equals("black")) return new int[][]{{1, -1}, {1, 1}}; // black moves down
-        return new int[][]{{-1, -1}, {-1, 1}}; // red moves up
+    // forward diagonals
+    private int[][] getDirections(Piece piece) {
+        if (piece.isKing) return new int[][]{{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+        if (piece.color.equals("black")) return new int[][]{{1, -1}, {1, 1}};
+        return new int[][]{{-1, -1}, {-1, 1}};
     }
 
-    private boolean inBounds(int row, int col) { // check if position is on the board
-        return row >= 0 && row < 8 && col >= 0 && col < 8; // must be within 8x8
+    // in bounds
+    private boolean inBounds(int row, int col) {
+        return row >= 0 && row < 8 && col >= 0 && col < 8;
     }
 }

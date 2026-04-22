@@ -1,54 +1,57 @@
-import java.io.IOException; // needed for socket errors
-import java.io.ObjectInputStream; // reads objects from socket
-import java.io.ObjectOutputStream; // writes objects to socket
-import java.net.Socket; // client socket
-import java.util.function.Consumer; // callback to GUI
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+import java.net.Socket;
+import java.util.function.Consumer;
 
-public class Client extends Thread { // runs on its own thread
+public class Client extends Thread {
 
-	Socket socketClient; // connection to server
-	ObjectOutputStream out; // sends messages to server
-	ObjectInputStream in; // receives messages from server
-	private Consumer<Message> callback; // sends received messages to GUI
+    Socket socketClient;
+    ObjectOutputStream out;
+    ObjectInputStream in;
+    private Consumer<Message> callback;
 
-	Client(Consumer<Message> call) { // constructor
-		callback = call; // set callback
-	}
+    // gui callback
+    Client(Consumer<Message> call) {
+        callback = call;
+    }
 
-	public void run() { // connection and read loop
-		try {
-			socketClient = new Socket("127.0.0.1", 5555); // connect to server
-			out = new ObjectOutputStream(socketClient.getOutputStream()); // open output
-			in = new ObjectInputStream(socketClient.getInputStream()); // open input
-			socketClient.setTcpNoDelay(true); // disable Nagle's algorithm
-		} catch (Exception e) {
-			System.out.println("Could not connect to server"); // log error
-		}
+    // read loop
+    public void run() {
+        try {
+            socketClient = new Socket("127.0.0.1", 5555);
+            out = new ObjectOutputStream(socketClient.getOutputStream());
+            in = new ObjectInputStream(socketClient.getInputStream());
+            socketClient.setTcpNoDelay(true);
+        } catch (Exception e) {
+            System.out.println("Could not connect to server");
+        }
 
-		if (in == null) {
-			return; // do not NPE the read loop
-		}
+        if (in == null) {
+            return;
+        }
 
-		while (true) { // keep reading messages
-			try {
-				Message msg = (Message) in.readObject(); // read message from server
-				callback.accept(msg); // send to GUI
-			} catch (Exception e) { // if connection drops
-				System.out.println("Disconnected from server"); // log
-				break; // exit loop
-			}
-		}
-	}
+        while (true) {
+            try {
+                Message msg = (Message) in.readObject();
+                callback.accept(msg);
+            } catch (Exception e) {
+                System.out.println("Disconnected from server");
+                break;
+            }
+        }
+    }
 
-	public void send(Message msg) { // send a message to server
-		if (out == null) {
-			return; // not connected
-		}
-		try {
-			out.reset(); // clear cache so updated objects are re-serialized
-			out.writeObject(msg); // write to stream
-		} catch (IOException e) {
-			System.out.println("Failed to send message"); // log error
-		}
-	}
+    // send to server
+    public void send(Message msg) {
+        if (out == null) {
+            return;
+        }
+        try {
+            out.reset();
+            out.writeObject(msg);
+        } catch (IOException e) {
+            System.out.println("Failed to send message");
+        }
+    }
 }

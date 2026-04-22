@@ -6,17 +6,12 @@ import java.nio.file.Paths;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.HashMap;
 
-/**
- * user|hashHex|rating|wins|losses|draws|friendsCsv|requestsCsv
- * Legacy 3-field lines: wins=losses=draws=0, friends and requests empty.
- */
 public class UserStore {
 
     public static final int DEFAULT_RATING = 1200;
@@ -30,12 +25,11 @@ public class UserStore {
         int wins;
         int losses;
         int draws;
-        /** Mutual accepted friends. */
         Set<String> friends = new LinkedHashSet<>();
-        /** Pending incoming: other users who requested this user. */
         Set<String> friendRequests = new LinkedHashSet<>();
     }
 
+    // load users file
     public UserStore(String fileName) {
         filePath = Paths.get(fileName);
         synchronized (this) {
@@ -47,6 +41,7 @@ public class UserStore {
         return users.containsKey(username);
     }
 
+    // new account
     public synchronized void registerUser(String username, String passwordHashHex) throws IOException {
         if (users.containsKey(username)) {
             throw new IOException("duplicate");
@@ -107,9 +102,7 @@ public class UserStore {
         saveToDisk();
     }
 
-    /**
-     * Human vs human. outcome: "draw" or winner's username. newRRed / newRBlack are already computed Elo values.
-     */
+    // two humans finished
     public synchronized void recordHumanMatch(String redName, String blackName, int newRRed, int newRBlack,
             String outcome) throws IOException {
         if ("draw".equals(outcome)) {
@@ -142,7 +135,7 @@ public class UserStore {
         saveToDisk();
     }
 
-    /** One human vs Bot(1200). outcome: "draw", human name if human won, or {@link #BOT_USERNAME} if bot won. */
+    // human vs bot
     public synchronized void recordBotMatch(String human, String outcome) throws IOException {
         UserRecord u = users.get(human);
         if (u == null) return;
@@ -175,7 +168,7 @@ public class UserStore {
         return new ArrayList<>(r.friendRequests);
     }
 
-    /** from requests to befriend to; to must have user record. */
+    // queue incoming request
     public synchronized void addIncomingFriendRequest(String to, String from) throws IOException {
         if (!isRealUser(to) || !isRealUser(from) || to.equals(from)) {
             return;
@@ -232,6 +225,7 @@ public class UserStore {
         saveToDisk();
     }
 
+    // password hash
     public static String sha256Hex(String plain) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
@@ -246,11 +240,13 @@ public class UserStore {
         }
     }
 
+    // elo update
     public static int computeNewRating(int playerRating, int opponentRating, double actualScore) {
         double expected = 1.0 / (1.0 + Math.pow(10, (opponentRating - playerRating) / 400.0));
         return (int) Math.round(playerRating + 32.0 * (actualScore - expected));
     }
 
+    // parse file
     private void loadFromDisk() {
         users.clear();
         if (!Files.exists(filePath)) {
@@ -302,6 +298,7 @@ public class UserStore {
         return out;
     }
 
+    // persist all
     private void saveToDisk() throws IOException {
         StringBuilder sb = new StringBuilder();
         for (Map.Entry<String, UserRecord> e : users.entrySet()) {

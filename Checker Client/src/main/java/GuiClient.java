@@ -42,11 +42,9 @@ public class GuiClient extends Application {
 	private static final double BOARD_LEFT_LABEL_COL_PX = 22.0;
 	private static final double BOARD_BOTTOM_LABEL_ROW_PX = 20.0;
 	private static final double BOARD_WOOD_PAD_PX = 16.0;
-	/** Cell size in px; updated from available space in the wood frame. */
 	double squareSize = 48.0;
 
 	StackPane boardWoodFrame;
-	/** Fills left column; centers {@link #boardWoodFrame} without stretching it. */
 	StackPane boardCenterStack;
 
 	int myRating = 1200;
@@ -54,9 +52,7 @@ public class GuiClient extends Application {
 	int myLosses;
 	int myDraws;
 	Label lobbyRatingLabel;
-	/** Shown in friends panel: pending request rows. */
 	VBox friendPendingRows;
-	/** When false, request rows are hidden. */
 	private boolean friendRequestsVisible;
 	ListView<String> onlineFriendsListView;
 	ListView<GameListEntry> gamesListView;
@@ -81,7 +77,6 @@ public class GuiClient extends Application {
 		return 8 * squareSize + BOARD_BOTTOM_LABEL_ROW_PX;
 	}
 
-	/** Rigid frame: 16px padding on all sides of the grid. */
 	private double boardFrameOuterWidth() {
 		return boardGridInnerWidth() + 2 * BOARD_WOOD_PAD_PX;
 	}
@@ -90,7 +85,6 @@ public class GuiClient extends Application {
 		return boardGridInnerHeight() + 2 * BOARD_WOOD_PAD_PX;
 	}
 
-	/** Lock wood frame to grid+padding; do not let parent stretch it. */
 	private void applyRigidBoardFrameSize() {
 		if (boardWoodFrame == null) return;
 		double ow = boardFrameOuterWidth();
@@ -150,7 +144,6 @@ public class GuiClient extends Application {
 		}
 	}
 
-	/** "Dark" when in light mode (click → dark); "Light" when in dark mode (click → light). */
 	private void syncThemeToggleLabel(Node root) {
 		if (root == null) return;
 		String label = lightTheme ? "Dark" : "Light";
@@ -198,7 +191,6 @@ public class GuiClient extends Application {
 		return bar;
 	}
 
-	/** High-contrast board: white and black only (same in light and dark theme). */
 	private Color boardToneLightSquare(int boardRow, int boardCol) {
 		return (boardRow + boardCol) % 2 == 0 ? Color.web("#FFFFFF") : Color.web("#1a1a1a");
 	}
@@ -207,7 +199,6 @@ public class GuiClient extends Application {
 		return lightTheme ? Color.web("#b85850") : Color.web("#a84840");
 	}
 
-	/** "Black" side pieces: teal/blue, flat. */
 	private Color pieceBlue() {
 		return lightTheme ? Color.web("#3d7a9e") : Color.web("#147493");
 	}
@@ -218,7 +209,6 @@ public class GuiClient extends Application {
 		circle.setStrokeWidth(1.0);
 	}
 
-	/** [avatar] [name (rating)] left; timer in a right-aligned node that takes remaining width. */
 	private HBox buildPlayerCard(String displayLine, Label timerLabel, String avatarHex) {
 		HBox row = new HBox(10);
 		row.setAlignment(Pos.CENTER_LEFT);
@@ -324,8 +314,8 @@ public class GuiClient extends Application {
 		lobbyRatingLabel.setText(myUsername + " (" + myRating + ") — " + myWins + "W " + myLosses + "L" + d);
 	}
 
-	/** Update friends list for real-time online/offline. */
-	private void applyFriendOnlineStatus(String friendName, boolean online) {
+	// online friends list row
+	private void syncFriendOnline(String friendName, boolean online) {
 		if (onlineFriendsListView == null || friendName == null || friendName.isEmpty()) {
 			return;
 		}
@@ -437,7 +427,6 @@ public class GuiClient extends Application {
 					setGraphic(null);
 					return;
 				}
-				// This list is only online friends: green. (Offline = removed from list via online_status.)
 				Circle dot = new Circle(5, Color.web("#22c55e"));
 				Label n = new Label(item);
 				n.getStyleClass().add("label");
@@ -702,10 +691,7 @@ public class GuiClient extends Application {
 		return (sec / 60) + ":" + String.format("%02d", sec % 60);
 	}
 
-	/**
-	 * Picks the largest cell size that fits the centered board stack; wood frame
-	 * stays exactly grid+padding (via {@link #applyRigidBoardFrameSize}).
-	 */
+	// fit cell size to available stack
 	private void recalculateBoardSquareSize() {
 		if (boardCenterStack == null || boardGrid == null) {
 			return;
@@ -716,7 +702,6 @@ public class GuiClient extends Application {
 			return;
 		}
 		double outerPad = 2 * BOARD_WOOD_PAD_PX;
-		// Max outer: (22+8s+32) x (8s+20+32) must fit in W x H
 		double sW = (W - BOARD_LEFT_LABEL_COL_PX - outerPad) / 8.0;
 		double sH = (H - BOARD_BOTTOM_LABEL_ROW_PX - outerPad) / 8.0;
 		double s = Math.min(sW, sH);
@@ -1194,7 +1179,7 @@ public class GuiClient extends Application {
 				if (msg.data instanceof Object[]) {
 					Object[] os = (Object[]) msg.data;
 					if (os.length >= 2 && os[0] instanceof String && os[1] instanceof Boolean) {
-						applyFriendOnlineStatus((String) os[0], (Boolean) os[1]);
+						syncFriendOnline((String) os[0], (Boolean) os[1]);
 					}
 				}
 				break;

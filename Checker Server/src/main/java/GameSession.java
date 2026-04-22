@@ -31,7 +31,7 @@ public class GameSession {
         this.game = new CheckersGame(player1.username, player2.username);
     }
 
-    /** Human (red) vs {@link UserStore#BOT_USERNAME} (black). */
+    // one human vs bot
     public GameSession(Server server, Server.ClientThread human, int sessionId) {
         this.server = server;
         this.vsBot = true;
@@ -179,7 +179,7 @@ public class GameSession {
         }
     }
 
-    /** Called on server for bot turn. */
+    // bot ply from timer
     public synchronized void applyBotMove() {
         if (!vsBot || finished || game.gameOver) {
             return;
