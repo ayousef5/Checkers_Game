@@ -25,6 +25,10 @@ public class Client extends Thread { // runs on its own thread
 			System.out.println("Could not connect to server"); // log error
 		}
 
+		if (in == null) {
+			return; // do not NPE the read loop
+		}
+
 		while (true) { // keep reading messages
 			try {
 				Message msg = (Message) in.readObject(); // read message from server
@@ -37,6 +41,9 @@ public class Client extends Thread { // runs on its own thread
 	}
 
 	public void send(Message msg) { // send a message to server
+		if (out == null) {
+			return; // not connected
+		}
 		try {
 			out.reset(); // clear cache so updated objects are re-serialized
 			out.writeObject(msg); // write to stream
