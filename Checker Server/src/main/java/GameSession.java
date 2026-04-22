@@ -22,6 +22,7 @@ public class GameSession {
     private boolean finished = false;
     private final Random rng = new Random();
 
+    // two human players
     public GameSession(Server server, Server.ClientThread player1, Server.ClientThread player2, int sessionId) {
         this.server = server;
         this.vsBot = false;
@@ -31,7 +32,7 @@ public class GameSession {
         this.game = new CheckersGame(player1.username, player2.username);
     }
 
-    // one human vs bot
+    // one human and bot
     public GameSession(Server server, Server.ClientThread human, int sessionId) {
         this.server = server;
         this.vsBot = true;
@@ -41,20 +42,24 @@ public class GameSession {
         this.game = new CheckersGame(human.username, UserStore.BOT_USERNAME);
     }
 
+    // only first finish wins
     public synchronized boolean tryMarkFinished() {
         if (finished) return false;
         finished = true;
         return true;
     }
 
+    // red side clock
     public synchronized int getRedSeconds() {
         return redSecondsLeft;
     }
 
+    // black side clock
     public synchronized int getBlackSeconds() {
         return blackSecondsLeft;
     }
 
+    // send starts and start timers
     public synchronized void startGame() {
         finished = false;
         redSecondsLeft = START_SECONDS;
@@ -86,6 +91,7 @@ public class GameSession {
         startTurnTimer();
     }
 
+    // register watcher
     public synchronized void addSpectator(Server.ClientThread c) {
         if (c == player1) {
             return;
@@ -98,10 +104,12 @@ public class GameSession {
         }
     }
 
+    // drop watcher
     public synchronized void removeSpectator(Server.ClientThread c) {
         spectators.remove(c);
     }
 
+    // send to all in session
     public synchronized void broadcastToGame(Message msg) {
         player1.sendMessage(msg);
         if (!vsBot) {
@@ -112,11 +120,13 @@ public class GameSession {
         }
     }
 
+    // push clock to everyone
     public synchronized void broadcastTimer() {
         Message m = new Message(Message.MessageType.timer_sync, new int[]{redSecondsLeft, blackSecondsLeft});
         broadcastToGame(m);
     }
 
+    // validate and broadcast move
     public synchronized void handleMove(Move move, Server.ClientThread sender) {
         if (sender.isSpectator) {
             return;
@@ -150,6 +160,7 @@ public class GameSession {
         }
     }
 
+    // delay bot turn
     private void scheduleBotMove() {
         if (!vsBot) {
             return;
@@ -165,6 +176,7 @@ public class GameSession {
         botMoveTimer = new Timer(true);
         final GameSession self = this;
         botMoveTimer.schedule(new TimerTask() {
+            // run bot on delay
             @Override
             public void run() {
                 server.runBotPly(self);
@@ -172,6 +184,7 @@ public class GameSession {
         }, delay);
     }
 
+    // clear bot delay
     private void cancelBotTimer() {
         if (botMoveTimer != null) {
             botMoveTimer.cancel();
@@ -179,7 +192,7 @@ public class GameSession {
         }
     }
 
-    // bot ply from timer
+    // apply bot move from timer
     public synchronized void applyBotMove() {
         if (!vsBot || finished || game.gameOver) {
             return;
@@ -208,10 +221,12 @@ public class GameSession {
         }
     }
 
+    // one second countdown
     private void startTurnTimer() {
         stopTurnTimer();
         turnTimer = new Timer(true);
         turnTimer.scheduleAtFixedRate(new TimerTask() {
+            // tick and maybe timeout
             @Override
             public void run() {
                 onTick();
@@ -219,6 +234,7 @@ public class GameSession {
         }, 1000L, 1000L);
     }
 
+    // each second of clock
     private void onTick() {
         String timeoutWinner = null;
         synchronized (this) {
@@ -248,6 +264,7 @@ public class GameSession {
         broadcastTimer();
     }
 
+    // stop countdown
     public synchronized void stopTurnTimer() {
         if (turnTimer != null) {
             turnTimer.cancel();
@@ -255,6 +272,7 @@ public class GameSession {
         }
     }
 
+    // clear game ties to clients
     public synchronized void endGameCleanup() {
         stopTurnTimer();
         cancelBotTimer();
@@ -273,10 +291,12 @@ public class GameSession {
         spectators.clear();
     }
 
+    // board to text square
     private static String squareToAlgebraic(int row, int col) {
         return "" + (char) ('A' + col) + (8 - row);
     }
 
+    // history line for clients
     private static String formatMoveHistoryLine(String username, Move move) {
         String from = squareToAlgebraic(move.fromRow, move.fromCol);
         String to = squareToAlgebraic(move.toRow, move.toCol);

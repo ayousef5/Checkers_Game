@@ -6,9 +6,11 @@ public final class ThemePreferences {
 
     private static final Path FILE = Paths.get(System.getProperty("user.home"), ".checkers-ui", "theme.properties");
 
+    // hide ctor
     private ThemePreferences() {
     }
 
+    // read saved theme
     public static boolean isLightTheme() {
         try {
             if (!Files.exists(FILE)) {
@@ -25,6 +27,7 @@ public final class ThemePreferences {
         return false;
     }
 
+    // write saved theme
     public static void setLightTheme(boolean light) {
         try {
             Files.createDirectories(FILE.getParent());

@@ -37,6 +37,7 @@ public class UserStore {
         }
     }
 
+    // check account exists
     public synchronized boolean userExists(String username) {
         return users.containsKey(username);
     }
@@ -53,32 +54,38 @@ public class UserStore {
         saveToDisk();
     }
 
+    // check password hash
     public synchronized boolean verifyLogin(String username, String passwordHashHex) {
         UserRecord r = users.get(username);
         if (r == null) return false;
         return r.hashHex.equalsIgnoreCase(passwordHashHex);
     }
 
+    // current rating
     public synchronized int getRating(String username) {
         UserRecord r = users.get(username);
         return r == null ? DEFAULT_RATING : r.rating;
     }
 
+    // win count
     public synchronized int getWins(String username) {
         UserRecord r = users.get(username);
         return r == null ? 0 : r.wins;
     }
 
+    // loss count
     public synchronized int getLosses(String username) {
         UserRecord r = users.get(username);
         return r == null ? 0 : r.losses;
     }
 
+    // draw count
     public synchronized int getDraws(String username) {
         UserRecord r = users.get(username);
         return r == null ? 0 : r.draws;
     }
 
+    // rating and record
     public synchronized int[] getStats(String username) {
         UserRecord r = users.get(username);
         if (r == null) {
@@ -87,6 +94,7 @@ public class UserStore {
         return new int[]{r.rating, r.wins, r.losses, r.draws};
     }
 
+    // overwrite rating
     public synchronized void setRating(String username, int rating) throws IOException {
         UserRecord r = users.get(username);
         if (r == null) return;
@@ -94,6 +102,7 @@ public class UserStore {
         saveToDisk();
     }
 
+    // apply both new ratings
     public synchronized void updateTwoRatings(String u1, int newR1, String u2, int newR2) throws IOException {
         UserRecord a = users.get(u1);
         UserRecord b = users.get(u2);
@@ -152,16 +161,19 @@ public class UserStore {
         saveToDisk();
     }
 
+    // not empty not bot
     private static boolean isRealUser(String name) {
         return name != null && !name.isEmpty() && !BOT_USERNAME.equals(name);
     }
 
+    // accepted friend names
     public synchronized List<String> getFriendsList(String u) {
         UserRecord r = users.get(u);
         if (r == null) return new ArrayList<>();
         return new ArrayList<>(r.friends);
     }
 
+    // pending from others
     public synchronized List<String> getIncomingFriendRequests(String u) {
         UserRecord r = users.get(u);
         if (r == null) return new ArrayList<>();
@@ -181,6 +193,7 @@ public class UserStore {
         saveToDisk();
     }
 
+    // drop one pending
     public synchronized void removeIncomingRequest(String to, String from) throws IOException {
         UserRecord t = users.get(to);
         if (t == null) return;
@@ -188,17 +201,20 @@ public class UserStore {
         saveToDisk();
     }
 
+    // mutual link
     public synchronized boolean areFriends(String a, String b) {
         if (a == null || b == null) return false;
         UserRecord ra = users.get(a);
         return ra != null && ra.friends.contains(b);
     }
 
+    // pending from given user
     public synchronized boolean hasIncomingRequestFrom(String to, String from) {
         UserRecord t = users.get(to);
         return t != null && t.friendRequests.contains(from);
     }
 
+    // add both ways
     public synchronized void acceptFriendship(String accepter, String requester) throws IOException {
         if (!isRealUser(accepter) || !isRealUser(requester)) {
             return;
@@ -213,6 +229,7 @@ public class UserStore {
         saveToDisk();
     }
 
+    // remove both ways
     public synchronized void endFriendship(String a, String b) throws IOException {
         UserRecord ra = users.get(a);
         UserRecord rb = users.get(b);
@@ -240,7 +257,7 @@ public class UserStore {
         }
     }
 
-    // elo update
+    // next rating from result
     public static int computeNewRating(int playerRating, int opponentRating, double actualScore) {
         double expected = 1.0 / (1.0 + Math.pow(10, (opponentRating - playerRating) / 400.0));
         return (int) Math.round(playerRating + 32.0 * (actualScore - expected));
@@ -274,6 +291,7 @@ public class UserStore {
         }
     }
 
+    // safe parse
     private static int safeInt(String[] p, int i, int def) {
         if (i >= p.length) return def;
         try {
@@ -283,6 +301,7 @@ public class UserStore {
         }
     }
 
+    // friends field to set
     private static Set<String> parseCsvSet(String[] p, int index) {
         if (p.length <= index) return new LinkedHashSet<>();
         String s = p[index].trim();
@@ -314,6 +333,7 @@ public class UserStore {
         Files.writeString(filePath, sb.toString(), StandardCharsets.UTF_8);
     }
 
+    // set to csv
     private static String joinSet(Set<String> s) {
         if (s == null || s.isEmpty()) return "";
         return String.join(",", s);

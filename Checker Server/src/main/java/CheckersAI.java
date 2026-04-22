@@ -5,6 +5,7 @@ public final class CheckersAI {
 
     public static final int MINIMAX_DEPTH = 4;
 
+    // not instantiable
     private CheckersAI() {
     }
 

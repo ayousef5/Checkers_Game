@@ -18,16 +18,19 @@ public class Server {
     private final Set<String> connectedUsernames = new HashSet<>();
     private final Object connectLock = new Object();
 
+    // start network layer
     Server(Consumer<Serializable> call) {
         callback = call;
         server = new TheServer();
         server.start();
     }
 
+    // user file access
     public UserStore getUserStore() {
         return userStore;
     }
 
+    // pair waiting players
     public void matchPlayers() {
         if (waitingQueue.size() >= 2) {
             ClientThread player1 = waitingQueue.remove(0);
@@ -43,10 +46,12 @@ public class Server {
         }
     }
 
+    // ask session for bot move
     public void runBotPly(GameSession session) {
         session.applyBotMove();
     }
 
+    // save stats announce end
     public void finishGameWithResult(GameSession session, String outcome) {
         synchronized (session) {
             if (!session.tryMarkFinished()) {
@@ -118,6 +123,7 @@ public class Server {
         activeSessions.remove(session);
     }
 
+    // handle disconnect
     public void removeClient(ClientThread client) {
         String u = client.username;
         if (u != null) {
@@ -149,6 +155,7 @@ public class Server {
         refreshAllFriendStates();
     }
 
+    // lookup connected client
     private ClientThread findByUsername(String uname) {
         if (uname == null) {
             return null;
@@ -161,7 +168,7 @@ public class Server {
         return null;
     }
 
-    // track login and tell friends
+    // add name to online set
     private void addConnectedUser(String name) {
         if (name == null) {
             return;
@@ -197,6 +204,7 @@ public class Server {
         }
     }
 
+    // friend online list to one client
     private void sendFriendState(ClientThread c) {
         if (c == null || c.username == null) {
             return;
@@ -220,6 +228,7 @@ public class Server {
         }
     }
 
+    // resync all clients friend views
     private void refreshAllFriendStates() {
         for (ClientThread c : new ArrayList<>(clients)) {
             if (c.username != null) {
@@ -230,6 +239,7 @@ public class Server {
 
     public class TheServer extends Thread {
 
+        // accept socket loop
         public void run() {
             try (ServerSocket mysocket = new ServerSocket(5555)) {
                 System.out.println("Server is waiting for a client!");
@@ -258,11 +268,13 @@ public class Server {
         boolean isSpectator = false;
         String lastOpponentName;
 
+        // wrap accepted socket
         ClientThread(Socket s, int count) {
             this.connection = s;
             this.count = count;
         }
 
+        // write to client stream
         public void sendMessage(Message msg) {
             try {
                 out.reset();
@@ -272,6 +284,7 @@ public class Server {
             }
         }
 
+        // open streams and dispatch
         public void run() {
             try {
                 out = new java.io.ObjectOutputStream(connection.getOutputStream());
@@ -292,6 +305,7 @@ public class Server {
             }
         }
 
+        // same name already connected
         private boolean nameTakenOnline(String name) {
             for (ClientThread c : clients) {
                 if (c != this && name.equals(c.username)) {
@@ -301,6 +315,7 @@ public class Server {
             return false;
         }
 
+        // route by message type
         private void handleMessage(Message msg) {
             switch (msg.type) {
 

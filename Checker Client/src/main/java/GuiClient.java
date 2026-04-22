@@ -69,22 +69,27 @@ public class GuiClient extends Application {
 		static final int START_SECONDS = 180;
 	}
 
+	// width of cell grid
 	private double boardGridInnerWidth() {
 		return BOARD_LEFT_LABEL_COL_PX + 8 * squareSize;
 	}
 
+	// height of cell grid
 	private double boardGridInnerHeight() {
 		return 8 * squareSize + BOARD_BOTTOM_LABEL_ROW_PX;
 	}
 
+	// width with wood pad
 	private double boardFrameOuterWidth() {
 		return boardGridInnerWidth() + 2 * BOARD_WOOD_PAD_PX;
 	}
 
+	// height with wood pad
 	private double boardFrameOuterHeight() {
 		return boardGridInnerHeight() + 2 * BOARD_WOOD_PAD_PX;
 	}
 
+	// keep frame from stretch
 	private void applyRigidBoardFrameSize() {
 		if (boardWoodFrame == null) return;
 		double ow = boardFrameOuterWidth();
@@ -96,10 +101,12 @@ public class GuiClient extends Application {
 		boardWoodFrame.setMaxHeight(Region.USE_PREF_SIZE);
 	}
 
+	// app entry
 	public static void main(String[] args) {
 		launch(args);
 	}
 
+	// first scene
 	@Override
 	public void start(Stage stage) throws Exception {
 		AppFonts.load();
@@ -125,6 +132,7 @@ public class GuiClient extends Application {
 		stage.show();
 	}
 
+	// light or dark sheet
 	private void applyTheme(Scene scene) {
 		if (scene == null) return;
 		String path = lightTheme ? "/styles/light.css" : "/styles/dark.css";
@@ -135,6 +143,7 @@ public class GuiClient extends Application {
 		}
 	}
 
+	// walk scene tree
 	private void visitNodes(Node n, Consumer<Node> fn) {
 		fn.accept(n);
 		if (n instanceof Parent) {
@@ -144,6 +153,7 @@ public class GuiClient extends Application {
 		}
 	}
 
+	// theme toggle label
 	private void syncThemeToggleLabel(Node root) {
 		if (root == null) return;
 		String label = lightTheme ? "Dark" : "Light";
@@ -154,6 +164,7 @@ public class GuiClient extends Application {
 		});
 	}
 
+	// flip light dark
 	private void onThemeToggled() {
 		lightTheme = !lightTheme;
 		ThemePreferences.setLightTheme(lightTheme);
@@ -175,6 +186,7 @@ public class GuiClient extends Application {
 		}
 	}
 
+	// top right theme control
 	private Button createThemeToggleButton() {
 		Button b = new Button(lightTheme ? "Dark" : "Light");
 		b.getStyleClass().add("btn-theme-toggle");
@@ -182,6 +194,7 @@ public class GuiClient extends Application {
 		return b;
 	}
 
+	// top bar for theme
 	private HBox buildTopThemeBar() {
 		HBox bar = new HBox();
 		Region spacer = new Region();
@@ -191,24 +204,29 @@ public class GuiClient extends Application {
 		return bar;
 	}
 
+	// checkerboard cell color
 	private Color boardToneLightSquare(int boardRow, int boardCol) {
 		return (boardRow + boardCol) % 2 == 0 ? Color.web("#FFFFFF") : Color.web("#1a1a1a");
 	}
 
+	// red man fill
 	private Color pieceRed() {
 		return lightTheme ? Color.web("#b85850") : Color.web("#a84840");
 	}
 
+	// black man fill
 	private Color pieceBlue() {
 		return lightTheme ? Color.web("#3d7a9e") : Color.web("#147493");
 	}
 
+	// disk look
 	private void styleFlatCheckerPiece(Circle circle, Color base) {
 		circle.setFill(base);
 		circle.setStroke(lightTheme ? Color.web("#0d0d0d", 0.55) : Color.web("#1a1a1a", 0.65));
 		circle.setStrokeWidth(1.0);
 	}
 
+	// player row with clock
 	private HBox buildPlayerCard(String displayLine, Label timerLabel, String avatarHex) {
 		HBox row = new HBox(10);
 		row.setAlignment(Pos.CENTER_LEFT);
@@ -250,6 +268,7 @@ public class GuiClient extends Application {
 		return row;
 	}
 
+	// login and register
 	private Scene createLoginScene() {
 		BorderPane root = new BorderPane();
 		root.getStyleClass().add("root-app");
@@ -306,6 +325,7 @@ public class GuiClient extends Application {
 		return scene;
 	}
 
+	// header stats line
 	private void updateLobbyProfileText() {
 		if (lobbyRatingLabel == null || myUsername == null) {
 			return;
@@ -314,7 +334,7 @@ public class GuiClient extends Application {
 		lobbyRatingLabel.setText(myUsername + " (" + myRating + ") — " + myWins + "W " + myLosses + "L" + d);
 	}
 
-	// online friends list row
+	// add or remove online friend
 	private void syncFriendOnline(String friendName, boolean online) {
 		if (onlineFriendsListView == null || friendName == null || friendName.isEmpty()) {
 			return;
@@ -329,6 +349,7 @@ public class GuiClient extends Application {
 		}
 	}
 
+	// build request rows
 	private void rebuildFriendPendingRows(Iterable<String> names) {
 		if (friendPendingRows == null) {
 			return;
@@ -355,6 +376,7 @@ public class GuiClient extends Application {
 		}
 	}
 
+	// request popup
 	private void showFriendIncomingDialog(String from) {
 		Stage d = new Stage();
 		d.initModality(Modality.WINDOW_MODAL);
@@ -389,6 +411,7 @@ public class GuiClient extends Application {
 		d.show();
 	}
 
+	// main lobby layout
 	private Scene createLobbyScene() {
 		BorderPane root = new BorderPane();
 		root.getStyleClass().add("root-app");
@@ -420,6 +443,7 @@ public class GuiClient extends Application {
 		onlineFriendsListView.setPrefHeight(180);
 		onlineFriendsListView.setPlaceholder(new Label("No friends online"));
 		onlineFriendsListView.setCellFactory(lv -> new ListCell<String>() {
+			// friend row with dot
 			@Override
 			protected void updateItem(String item, boolean empty) {
 				super.updateItem(item, empty);
@@ -516,6 +540,7 @@ public class GuiClient extends Application {
 		return scene;
 	}
 
+	// matchmaking view
 	private Scene createWaitingScene() {
 		BorderPane root = new BorderPane();
 		root.getStyleClass().add("root-app");
@@ -540,6 +565,7 @@ public class GuiClient extends Application {
 		return scene;
 	}
 
+	// play screen
 	private Scene createGameScene() {
 		turnLabel = new Label("");
 		turnLabel.getStyleClass().add("turn-banner");
@@ -625,6 +651,7 @@ public class GuiClient extends Application {
 		return scene;
 	}
 
+	// moves chat rules
 	private VBox createRightPanel() {
 		VBox panel = new VBox(12);
 		panel.setPadding(new Insets(14, 14, 14, 10));
@@ -686,6 +713,7 @@ public class GuiClient extends Application {
 		return panel;
 	}
 
+	// minutes seconds text
 	private static String formatTime(int sec) {
 		sec = Math.max(0, sec);
 		return (sec / 60) + ":" + String.format("%02d", sec % 60);
@@ -716,6 +744,7 @@ public class GuiClient extends Application {
 		applyRigidBoardFrameSize();
 	}
 
+	// row col sizes for board
 	private void applyBoardGridConstraints() {
 		boardGrid.getColumnConstraints().clear();
 		boardGrid.getRowConstraints().clear();
@@ -744,6 +773,7 @@ public class GuiClient extends Application {
 		boardGrid.setMaxSize(boardGridInnerWidth(), boardGridInnerHeight());
 	}
 
+	// add move line
 	private void appendMoveHistoryText(String line) {
 		if (moveHistoryList == null || line == null || line.isEmpty()) return;
 		moveHistoryList.getItems().add(line);
@@ -751,6 +781,7 @@ public class GuiClient extends Application {
 		Platform.runLater(() -> moveHistoryList.scrollTo(last));
 	}
 
+	// sync clock text
 	private void updateTimerLabels() {
 		if (opponentTimerLabel == null || myTimerLabel == null) return;
 		if (spectating) {
@@ -764,6 +795,7 @@ public class GuiClient extends Application {
 		}
 	}
 
+	// turn banner color
 	private void setTurnStyle(boolean yourTurn, boolean captureRequired) {
 		if (yourTurn) {
 			if (captureRequired) {
@@ -776,6 +808,7 @@ public class GuiClient extends Application {
 		}
 	}
 
+	// draw squares and pieces
 	public void renderBoard() {
 		if (boardGrid == null) return;
 		boardGrid.getChildren().clear();
@@ -906,6 +939,7 @@ public class GuiClient extends Application {
 		}
 	}
 
+	// select or move
 	private void onSquareClicked(int row, int col) {
 		if (spectating) return;
 		if (localGame == null) return;
@@ -946,6 +980,7 @@ public class GuiClient extends Application {
 		}
 	}
 
+	// post chat line
 	private void sendChat(String text, TextField input) {
 		if (!text.trim().isEmpty()) {
 			clientConnection.send(new Message(Message.MessageType.chat, text));
@@ -953,10 +988,12 @@ public class GuiClient extends Application {
 		}
 	}
 
+	// theme on popup
 	private void styleDialog(Scene sc) {
 		applyTheme(sc);
 	}
 
+	// offer draw
 	private void showDrawDialog() {
 		if (spectating) return;
 		Stage dialog = new Stage();
@@ -991,6 +1028,7 @@ public class GuiClient extends Application {
 		dialog.show();
 	}
 
+	// confirm resign
 	private void showResignDialog() {
 		if (spectating) return;
 		Stage dialog = new Stage();
@@ -1025,6 +1063,7 @@ public class GuiClient extends Application {
 		dialog.show();
 	}
 
+	// process server message
 	private void handleMessage(Message msg) {
 		switch (msg.type) {
 
@@ -1258,6 +1297,7 @@ public class GuiClient extends Application {
 		}
 	}
 
+	// answer draw offer
 	private void showDrawResponseDialog() {
 		Stage dialog = new Stage();
 		dialog.initModality(Modality.APPLICATION_MODAL);
@@ -1294,6 +1334,7 @@ public class GuiClient extends Application {
 		dialog.show();
 	}
 
+	// reset to lobby
 	private void returnToLobbyAfterGame() {
 		localGame = null;
 		selectedRow = -1;
@@ -1321,6 +1362,7 @@ public class GuiClient extends Application {
 		clientConnection.send(new Message(Message.MessageType.list_games, null));
 	}
 
+	// end game modal
 	private void showGameOverDialog(String result) {
 		Stage dialog = new Stage();
 		dialog.initModality(Modality.APPLICATION_MODAL);

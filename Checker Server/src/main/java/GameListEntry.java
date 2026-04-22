@@ -9,6 +9,7 @@ public class GameListEntry implements Serializable {
     public int ratingRed;
     public int ratingBlack;
 
+    // lobby row data
     public GameListEntry(int sessionId, String playerRed, String playerBlack, int ratingRed, int ratingBlack) {
         this.sessionId = sessionId;
         this.playerRed = playerRed;
@@ -17,6 +18,7 @@ public class GameListEntry implements Serializable {
         this.ratingBlack = ratingBlack;
     }
 
+    // list cell text
     @Override
     public String toString() {
         return "#" + sessionId + "  " + playerRed + " (" + ratingRed + ")  vs  " + playerBlack + " (" + ratingBlack + ")";

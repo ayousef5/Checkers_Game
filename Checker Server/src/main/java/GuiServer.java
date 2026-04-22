@@ -25,10 +25,12 @@ public class GuiServer extends Application {
 	boolean lightTheme = ThemePreferences.isLightTheme();
 	Stage primaryStage;
 
+	// app entry
 	public static void main(String[] args) {
 		launch(args);
 	}
 
+	// build log window
 	@Override
 	public void start(Stage primaryStage) throws Exception {
 		AppFonts.load();
@@ -53,6 +55,7 @@ public class GuiServer extends Application {
 		primaryStage.show();
 	}
 
+	// light or dark sheet
 	private void applyTheme(Scene scene) {
 		if (scene == null) return;
 		String path = lightTheme ? "/styles/light.css" : "/styles/dark.css";
@@ -63,6 +66,7 @@ public class GuiServer extends Application {
 		}
 	}
 
+	// walk scene graph
 	private void visitNodes(Node n, java.util.function.Consumer<Node> fn) {
 		fn.accept(n);
 		if (n instanceof Parent) {
@@ -72,6 +76,7 @@ public class GuiServer extends Application {
 		}
 	}
 
+	// theme button label
 	private void syncThemeButton(Node root) {
 		String label = lightTheme ? "Dark" : "Light";
 		visitNodes(root, n -> {
@@ -81,6 +86,7 @@ public class GuiServer extends Application {
 		});
 	}
 
+	// main layout
 	public Scene createServerGui() {
 		BorderPane pane = new BorderPane();
 		pane.getStyleClass().add("root-app");

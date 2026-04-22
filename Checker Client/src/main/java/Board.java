@@ -29,10 +29,12 @@ public class Board implements Serializable {
         }
     }
 
+    // cell contents
     public Piece getPiece(int row, int col) {
         return grid[row][col];
     }
 
+    // place and sync coords
     public void setPiece(int row, int col, Piece piece) {
         grid[row][col] = piece;
         if (piece != null) {
@@ -41,6 +43,7 @@ public class Board implements Serializable {
         }
     }
 
+    // clear cell
     public void removePiece(int row, int col) {
         grid[row][col] = null;
     }
