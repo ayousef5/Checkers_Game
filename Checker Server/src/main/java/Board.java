@@ -10,6 +10,23 @@ public class Board implements Serializable { // sent over sockets
         initializeBoard(); // place pieces in starting positions
     }
 
+    /** Full deep copy; independent pieces. */
+    public static Board copyOf(Board other) {
+        Board b = new Board();
+        for (int r = 0; r < 8; r++) {
+            for (int c = 0; c < 8; c++) {
+                b.grid[r][c] = null;
+                Piece p = other.grid[r][c];
+                if (p != null) {
+                    Piece q = new Piece(p.color, r, c);
+                    q.isKing = p.isKing;
+                    b.grid[r][c] = q;
+                }
+            }
+        }
+        return b;
+    }
+
     private void initializeBoard() { // place pieces on dark squares
         for (int row = 0; row < 3; row++) { // black pieces on rows 0-2
             for (int col = 0; col < 8; col++) { // check every column

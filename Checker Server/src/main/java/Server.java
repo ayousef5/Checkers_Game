@@ -2,8 +2,13 @@ import java.io.Serializable;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.function.Consumer;
 
+/**
+ * See {@link UserStore} for user line format, friends, and win/loss/draws.
+ */
 public class Server {
 
     int count = 1;
@@ -13,6 +18,9 @@ public class Server {
     TheServer server;
     private Consumer<Serializable> callback;
     private final UserStore userStore = new UserStore("users.txt");
+    /** Usernames with an authenticated, active connection. */
+    private final Set<String> connectedUsernames = new HashSet<>();
+    private final Object connectLock = new Object();
 
     Server(Consumer<Serializable> call) {
         callback = call;
@@ -39,6 +47,10 @@ public class Server {
         }
     }
 
+    public void runBotPly(GameSession session) {
+        session.applyBotMove();
+    }
+
     public void finishGameWithResult(GameSession session, String outcome) {
         synchronized (session) {
             if (!session.tryMarkFinished()) {
@@ -47,24 +59,38 @@ public class Server {
             session.stopTurnTimer();
         }
         try {
-            if ("draw".equals(outcome)) {
+            if (session.vsBot) {
+                String hum = session.player1.username;
+                if ("draw".equals(outcome)) {
+                    userStore.recordBotMatch(hum, "draw");
+                } else if (outcome.equals(hum)) {
+                    userStore.recordBotMatch(hum, hum);
+                } else {
+                    userStore.recordBotMatch(hum, UserStore.BOT_USERNAME);
+                }
+            } else if ("draw".equals(outcome)) {
                 String r = session.game.redPlayer;
                 String b = session.game.blackPlayer;
-                int rr = userStore.getRating(r);
-                int br = userStore.getRating(b);
-                int nr = UserStore.computeNewRating(rr, br, 0.5);
-                int nb = UserStore.computeNewRating(br, rr, 0.5);
-                userStore.updateTwoRatings(r, nr, b, nb);
+                int rr0 = userStore.getRating(r);
+                int br0 = userStore.getRating(b);
+                int nr = UserStore.computeNewRating(rr0, br0, 0.5);
+                int nb = UserStore.computeNewRating(br0, rr0, 0.5);
+                userStore.recordHumanMatch(r, b, nr, nb, "draw");
             } else {
                 String w = outcome;
                 String r = session.game.redPlayer;
                 String b = session.game.blackPlayer;
-                String l = w.equals(r) ? b : r;
-                int wr = userStore.getRating(w);
-                int lr = userStore.getRating(l);
-                int nw = UserStore.computeNewRating(wr, lr, 1.0);
-                int nl = UserStore.computeNewRating(lr, wr, 0.0);
-                userStore.updateTwoRatings(w, nw, l, nl);
+                int rr0 = userStore.getRating(r);
+                int br0 = userStore.getRating(b);
+                if (w.equals(r)) {
+                    int nr = UserStore.computeNewRating(rr0, br0, 1.0);
+                    int nbl = UserStore.computeNewRating(br0, rr0, 0.0);
+                    userStore.recordHumanMatch(r, b, nr, nbl, w);
+                } else {
+                    int nbw = UserStore.computeNewRating(br0, rr0, 1.0);
+                    int nrl = UserStore.computeNewRating(rr0, br0, 0.0);
+                    userStore.recordHumanMatch(r, b, nrl, nbw, w);
+                }
             }
         } catch (Exception e) {
             callback.accept("Rating save failed: " + e.getMessage());
@@ -72,18 +98,38 @@ public class Server {
 
         session.broadcastToGame(new Message(Message.MessageType.game_over, outcome));
 
-        int p1r = userStore.getRating(session.player1.username);
-        int p2r = userStore.getRating(session.player2.username);
-        session.player1.rating = p1r;
-        session.player2.rating = p2r;
-        session.player1.sendMessage(new Message(Message.MessageType.rating_update, p1r));
-        session.player2.sendMessage(new Message(Message.MessageType.rating_update, p2r));
+        try {
+            if (session.vsBot) {
+                int[] s = userStore.getStats(session.player1.username);
+                session.player1.rating = s[0];
+                session.player1.sendMessage(
+                        new Message(Message.MessageType.rating_update, new int[]{s[0], s[1], s[2], s[3]}));
+            } else {
+                int[] s1 = userStore.getStats(session.player1.username);
+                int[] s2 = userStore.getStats(session.player2.username);
+                session.player1.rating = s1[0];
+                session.player2.rating = s2[0];
+                session.player1.sendMessage(
+                        new Message(Message.MessageType.rating_update, new int[]{s1[0], s1[1], s1[2], s1[3]}));
+                session.player2.sendMessage(
+                        new Message(Message.MessageType.rating_update, new int[]{s2[0], s2[1], s2[2], s2[3]}));
+            }
+        } catch (Exception e) {
+            callback.accept("Stats push failed: " + e.getMessage());
+        }
 
         session.endGameCleanup();
         activeSessions.remove(session);
     }
 
     public void removeClient(ClientThread client) {
+        String u = client.username;
+        if (u != null) {
+            synchronized (connectLock) {
+                connectedUsernames.remove(u);
+            }
+            broadcastOnlineStatusToFriendsOf(u, false);
+        }
         clients.remove(client);
         waitingQueue.remove(client);
         GameSession g = client.currentGame;
@@ -93,11 +139,98 @@ public class Server {
                 client.currentGame = null;
                 client.isSpectator = false;
             } else {
-                ClientThread opp = g.player1 == client ? g.player2 : g.player1;
-                finishGameWithResult(g, opp.username);
+                if (g.vsBot) {
+                    if (g.player1 == client) {
+                        finishGameWithResult(g, UserStore.BOT_USERNAME);
+                    }
+                } else {
+                    ClientThread opp = g.player1 == client ? g.player2 : g.player1;
+                    finishGameWithResult(g, opp.username);
+                }
             }
         }
         callback.accept((client.username != null ? client.username : "Client") + " disconnected");
+        refreshAllFriendStates();
+    }
+
+    private ClientThread findByUsername(String uname) {
+        if (uname == null) {
+            return null;
+        }
+        for (ClientThread c : clients) {
+            if (uname.equals(c.username)) {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    private void addConnectedUser(String name) {
+        if (name == null) {
+            return;
+        }
+        synchronized (connectLock) {
+            connectedUsernames.add(name);
+        }
+        broadcastOnlineStatusToFriendsOf(name, true);
+    }
+
+    /**
+     * Notifies all connected friends of this user that their online status changed.
+     */
+    private void broadcastOnlineStatusToFriendsOf(String u, boolean online) {
+        if (u == null) {
+            return;
+        }
+        try {
+            for (String f : userStore.getFriendsList(u)) {
+                boolean fOnline;
+                synchronized (connectLock) {
+                    fOnline = connectedUsernames.contains(f);
+                }
+                if (!fOnline) {
+                    continue;
+                }
+                ClientThread friendClient = findByUsername(f);
+                if (friendClient != null) {
+                    friendClient.sendMessage(new Message(Message.MessageType.online_status,
+                            new Object[]{u, online}));
+                }
+            }
+        } catch (Exception e) {
+            callback.accept("online_status: " + e.getMessage());
+        }
+    }
+
+    private void sendFriendState(ClientThread c) {
+        if (c == null || c.username == null) {
+            return;
+        }
+        try {
+            ArrayList<String> online = new ArrayList<>();
+            for (String f : userStore.getFriendsList(c.username)) {
+                boolean on;
+                synchronized (connectLock) {
+                    on = connectedUsernames.contains(f);
+                }
+                if (on) {
+                    online.add(f);
+                }
+            }
+            c.sendMessage(new Message(Message.MessageType.friend_list_online, online));
+            c.sendMessage(new Message(Message.MessageType.friend_pending_list,
+                    new ArrayList<>(userStore.getIncomingFriendRequests(c.username))));
+        } catch (Exception e) {
+            callback.accept("Friend state: " + e.getMessage());
+        }
+    }
+
+    private void refreshAllFriendStates() {
+        for (ClientThread c : new ArrayList<>(clients)) {
+            if (c.username != null) {
+                sendFriendState(c);
+            }
+        }
     }
 
     public class TheServer extends Thread {
@@ -197,8 +330,11 @@ public class Server {
                             userStore.registerUser(name, UserStore.sha256Hex(pass));
                         }
                         this.username = name;
-                        this.rating = userStore.getRating(name);
-                        sendMessage(new Message(Message.MessageType.auth_ok, this.rating));
+                        int[] stReg = userStore.getStats(name);
+                        this.rating = stReg[0];
+                        sendMessage(new Message(Message.MessageType.auth_ok, stReg));
+                        Server.this.addConnectedUser(name);
+                        refreshAllFriendStates();
                     } catch (Exception e) {
                         sendMessage(new Message(Message.MessageType.auth_fail, "Could not register."));
                     }
@@ -225,10 +361,28 @@ public class Server {
                             }
                         }
                         this.username = name;
-                        this.rating = userStore.getRating(name);
-                        sendMessage(new Message(Message.MessageType.auth_ok, this.rating));
+                        int[] stIn = userStore.getStats(name);
+                        this.rating = stIn[0];
+                        sendMessage(new Message(Message.MessageType.auth_ok, stIn));
+                        Server.this.addConnectedUser(name);
+                        refreshAllFriendStates();
                     } catch (Exception e) {
                         sendMessage(new Message(Message.MessageType.auth_fail, "Could not log in."));
+                    }
+                    break;
+
+                case play_vs_bot:
+                    if (username == null || isSpectator) {
+                        break;
+                    }
+                    waitingQueue.remove(this);
+                    {
+                        GameSession botSession = new GameSession(Server.this, this, count++);
+                        activeSessions.add(botSession);
+                        this.currentGame = botSession;
+                        this.lastOpponentName = UserStore.BOT_USERNAME;
+                        botSession.startGame();
+                        callback.accept(username + " started vs Bot");
                     }
                     break;
 
@@ -299,6 +453,7 @@ public class Server {
                         }
                     }
                     this.username = name;
+                    Server.this.addConnectedUser(name);
                     sendMessage(new Message(Message.MessageType.username_ok, null));
                     waitingQueue.add(this);
                     sendMessage(new Message(Message.MessageType.waiting, null));
@@ -367,6 +522,107 @@ public class Server {
                     sendMessage(new Message(Message.MessageType.waiting, null));
                     matchPlayers();
                     break;
+
+                case friend_add: {
+                    if (username == null) {
+                        break;
+                    }
+                    String targetU = (String) msg.data;
+                    if (targetU == null) {
+                        targetU = "";
+                    } else {
+                        targetU = targetU.trim();
+                    }
+                    if (targetU.isEmpty() || UserStore.BOT_USERNAME.equalsIgnoreCase(targetU)
+                            || targetU.equals(username)) {
+                        sendMessage(new Message(Message.MessageType.friend_error, "Invalid username."));
+                        break;
+                    }
+                    if (!userStore.userExists(targetU)) {
+                        sendMessage(new Message(Message.MessageType.friend_error, "No such user."));
+                        break;
+                    }
+                    if (userStore.areFriends(username, targetU)) {
+                        sendMessage(new Message(Message.MessageType.friend_error, "Already friends."));
+                        break;
+                    }
+                    if (userStore.hasIncomingRequestFrom(username, targetU)) {
+                        sendMessage(new Message(Message.MessageType.friend_notice,
+                                "You have a pending request from " + targetU + " — use Requests to accept or decline."));
+                        break;
+                    }
+                    if (userStore.getIncomingFriendRequests(targetU).contains(username)) {
+                        sendMessage(new Message(Message.MessageType.friend_error, "Request already sent."));
+                        break;
+                    }
+                    try {
+                        userStore.addIncomingFriendRequest(targetU, username);
+                    } catch (Exception e) {
+                        sendMessage(new Message(Message.MessageType.friend_error, "Could not send request."));
+                        break;
+                    }
+                    ClientThread tgt = findByUsername(targetU);
+                    if (tgt != null) {
+                        tgt.sendMessage(new Message(Message.MessageType.friend_incoming, username));
+                        sendFriendState(tgt);
+                    }
+                    sendMessage(new Message(Message.MessageType.friend_notice, "Friend request sent to " + targetU + "."));
+                    break;
+                }
+
+                case friend_accept: {
+                    if (username == null) {
+                        break;
+                    }
+                    String from = (String) msg.data;
+                    if (from == null) {
+                        from = "";
+                    } else {
+                        from = from.trim();
+                    }
+                    if (from.isEmpty() || !userStore.hasIncomingRequestFrom(username, from)) {
+                        sendMessage(new Message(Message.MessageType.friend_error, "No such request."));
+                        break;
+                    }
+                    try {
+                        userStore.acceptFriendship(username, from);
+                    } catch (Exception e) {
+                        sendMessage(new Message(Message.MessageType.friend_error, "Could not accept."));
+                        break;
+                    }
+                    refreshAllFriendStates();
+                    sendMessage(new Message(Message.MessageType.friend_notice, "You are now friends with " + from + "."));
+                    ClientThread requester = findByUsername(from);
+                    if (requester != null) {
+                        requester.sendMessage(new Message(Message.MessageType.friend_notice,
+                                username + " accepted your friend request."));
+                    }
+                    break;
+                }
+
+                case friend_decline: {
+                    if (username == null) {
+                        break;
+                    }
+                    String dFrom = (String) msg.data;
+                    if (dFrom == null) {
+                        dFrom = "";
+                    } else {
+                        dFrom = dFrom.trim();
+                    }
+                    if (dFrom.isEmpty() || !userStore.hasIncomingRequestFrom(username, dFrom)) {
+                        sendMessage(new Message(Message.MessageType.friend_error, "No such request."));
+                        break;
+                    }
+                    try {
+                        userStore.removeIncomingRequest(username, dFrom);
+                    } catch (Exception e) {
+                        sendMessage(new Message(Message.MessageType.friend_error, "Could not update."));
+                        break;
+                    }
+                    sendFriendState(this);
+                    break;
+                }
 
                 default:
                     callback.accept("Unknown message from " + username);

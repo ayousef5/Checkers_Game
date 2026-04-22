@@ -316,3 +316,13 @@
 .scroll-pane .viewport {
     -fx-background-color: transparent;
 }
+
+.friends-panel {
+    -fx-border-color: rgba(255, 255, 255, 0.12);
+    -fx-border-width: 0 1 0 0;
+}
+
+.friend-requests-block {
+    -fx-spacing: 6;
+    -fx-padding: 0 0 0 0;
+}

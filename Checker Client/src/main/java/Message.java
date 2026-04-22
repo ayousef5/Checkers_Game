@@ -30,7 +30,17 @@ public class Message implements Serializable { // sent over sockets
         draw_offer,
         draw_accept,
         draw_decline,
-        resign
+        resign,
+        play_vs_bot,
+        friend_add,
+        friend_accept,
+        friend_decline,
+        friend_list_online,
+        friend_pending_list,
+        friend_incoming,
+        friend_error,
+        friend_notice,
+        online_status
     }
 
     public MessageType type; // message type

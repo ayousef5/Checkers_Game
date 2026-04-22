@@ -50,7 +50,15 @@ public class GuiClient extends Application {
 	StackPane boardCenterStack;
 
 	int myRating = 1200;
+	int myWins;
+	int myLosses;
+	int myDraws;
 	Label lobbyRatingLabel;
+	/** Shown in friends panel: pending request rows. */
+	VBox friendPendingRows;
+	/** When false, request rows are hidden. */
+	private boolean friendRequestsVisible;
+	ListView<String> onlineFriendsListView;
 	ListView<GameListEntry> gamesListView;
 	Label opponentTimerLabel;
 	Label myTimerLabel;
@@ -308,27 +316,177 @@ public class GuiClient extends Application {
 		return scene;
 	}
 
+	private void updateLobbyProfileText() {
+		if (lobbyRatingLabel == null || myUsername == null) {
+			return;
+		}
+		String d = (myDraws > 0) ? (" " + myDraws + "D") : "";
+		lobbyRatingLabel.setText(myUsername + " (" + myRating + ") — " + myWins + "W " + myLosses + "L" + d);
+	}
+
+	/** Update friends list for real-time online/offline. */
+	private void applyFriendOnlineStatus(String friendName, boolean online) {
+		if (onlineFriendsListView == null || friendName == null || friendName.isEmpty()) {
+			return;
+		}
+		var items = onlineFriendsListView.getItems();
+		if (online) {
+			if (!items.contains(friendName)) {
+				items.add(friendName);
+			}
+		} else {
+			items.remove(friendName);
+		}
+	}
+
+	private void rebuildFriendPendingRows(Iterable<String> names) {
+		if (friendPendingRows == null) {
+			return;
+		}
+		friendPendingRows.getChildren().clear();
+		for (String n : names) {
+			if (n == null || n.isEmpty()) {
+				continue;
+			}
+			Label l = new Label(n);
+			l.getStyleClass().add("label");
+			Button a = new Button("Accept");
+			a.getStyleClass().add("btn-primary");
+			String from = n;
+			a.setOnAction(e -> clientConnection.send(
+					new Message(Message.MessageType.friend_accept, from)));
+			Button d = new Button("Decline");
+			d.getStyleClass().add("btn-secondary");
+			d.setOnAction(e -> clientConnection.send(
+					new Message(Message.MessageType.friend_decline, from)));
+			HBox row = new HBox(8, l, a, d);
+			row.setAlignment(Pos.CENTER_LEFT);
+			friendPendingRows.getChildren().add(row);
+		}
+	}
+
+	private void showFriendIncomingDialog(String from) {
+		Stage d = new Stage();
+		d.initModality(Modality.WINDOW_MODAL);
+		if (primaryStage != null) {
+			d.initOwner(primaryStage);
+		}
+		d.setTitle("Friend request");
+
+		VBox box = new VBox(16);
+		box.getStyleClass().add("dialog-root");
+		box.setAlignment(Pos.CENTER);
+		Label t = new Label(from + " sent you a friend request");
+		t.getStyleClass().add("dialog-message");
+		Button acc = new Button("Accept");
+		acc.getStyleClass().add("btn-primary");
+		acc.setOnAction(e -> {
+			clientConnection.send(new Message(Message.MessageType.friend_accept, from));
+			d.close();
+		});
+		Button dec = new Button("Decline");
+		dec.getStyleClass().add("btn-danger");
+		dec.setOnAction(e -> {
+			clientConnection.send(new Message(Message.MessageType.friend_decline, from));
+			d.close();
+		});
+		HBox b = new HBox(10, dec, acc);
+		b.setAlignment(Pos.CENTER);
+		box.getChildren().addAll(t, b);
+		Scene sc = new Scene(box, 420, 160);
+		styleDialog(sc);
+		d.setScene(sc);
+		d.show();
+	}
+
 	private Scene createLobbyScene() {
 		BorderPane root = new BorderPane();
 		root.getStyleClass().add("root-app");
 
+		VBox friendsCol = new VBox(10);
+		friendsCol.getStyleClass().add("friends-panel");
+		friendsCol.setPadding(new Insets(12, 14, 12, 12));
+		friendsCol.setPrefWidth(256);
+		friendsCol.setMinWidth(200);
+		friendsCol.setMaxWidth(300);
+
+		Label friendsHeader = new Label("FRIENDS");
+		friendsHeader.getStyleClass().add("section-header");
+
+		Button requestsBtn = new Button("Requests");
+		requestsBtn.getStyleClass().add("btn-secondary");
+		friendPendingRows = new VBox(6);
+		friendPendingRows.getStyleClass().add("friend-requests-block");
+		friendRequestsVisible = false;
+		friendPendingRows.setVisible(false);
+		friendPendingRows.managedProperty().bind(friendPendingRows.visibleProperty());
+		requestsBtn.setOnAction(e -> {
+			friendRequestsVisible = !friendRequestsVisible;
+			friendPendingRows.setVisible(friendRequestsVisible);
+		});
+
+		onlineFriendsListView = new ListView<>();
+		onlineFriendsListView.getStyleClass().add("list-view");
+		onlineFriendsListView.setPrefHeight(180);
+		onlineFriendsListView.setPlaceholder(new Label("No friends online"));
+		onlineFriendsListView.setCellFactory(lv -> new ListCell<String>() {
+			@Override
+			protected void updateItem(String item, boolean empty) {
+				super.updateItem(item, empty);
+				if (empty || item == null) {
+					setGraphic(null);
+					return;
+				}
+				// This list is only online friends: green. (Offline = removed from list via online_status.)
+				Circle dot = new Circle(5, Color.web("#22c55e"));
+				Label n = new Label(item);
+				n.getStyleClass().add("label");
+				HBox row = new HBox(8, dot, n);
+				row.setAlignment(Pos.CENTER_LEFT);
+				setGraphic(row);
+			}
+		});
+
+		HBox addRow = new HBox(6);
+		TextField addFriendField = new TextField();
+		addFriendField.setPromptText("username");
+		addFriendField.getStyleClass().add("text-field");
+		Button addFriendBtn = new Button("Add friend");
+		addFriendBtn.getStyleClass().add("btn-secondary");
+		addFriendBtn.setMinWidth(80.0);
+		addFriendBtn.setMaxWidth(Region.USE_PREF_SIZE);
+		addFriendBtn.setOnAction(e -> {
+			String t = addFriendField.getText() != null ? addFriendField.getText().trim() : "";
+			if (!t.isEmpty()) {
+				clientConnection.send(new Message(Message.MessageType.friend_add, t));
+				addFriendField.clear();
+			}
+		});
+		HBox.setHgrow(addFriendField, Priority.ALWAYS);
+		HBox.setHgrow(addFriendBtn, Priority.NEVER);
+		addRow.getChildren().addAll(addFriendField, addFriendBtn);
+
+		friendsCol.getChildren().addAll(friendsHeader, requestsBtn, friendPendingRows, onlineFriendsListView, addRow);
+		VBox.setVgrow(onlineFriendsListView, Priority.ALWAYS);
+
 		VBox card = new VBox(14);
 		card.getStyleClass().add("card");
 		card.setAlignment(Pos.TOP_CENTER);
-		card.setMaxWidth(520);
+		card.setMaxWidth(540);
 		card.setFillWidth(true);
 
 		Label title = new Label("LOBBY");
 		title.getStyleClass().add("title-lg");
 
-		lobbyRatingLabel = new Label("Rating: —");
+		lobbyRatingLabel = new Label("—");
 		lobbyRatingLabel.getStyleClass().add("subtitle");
+		updateLobbyProfileText();
 
 		Label gamesTitle = new Label("Games in progress");
 		gamesTitle.getStyleClass().add("section-header");
 
 		gamesListView = new ListView<>();
-		gamesListView.setPrefHeight(240);
+		gamesListView.setPrefHeight(220);
 		gamesListView.getStyleClass().add("list-view");
 
 		Button refreshBtn = new Button("Refresh list");
@@ -346,17 +504,25 @@ public class GuiClient extends Application {
 			}
 		});
 
-		Button playBtn = new Button("FIND MATCH");
+		Button playBtn = new Button("Search for Match");
 		playBtn.getStyleClass().add("btn-primary");
 		playBtn.setMaxWidth(Double.MAX_VALUE);
 		playBtn.setOnAction(e -> clientConnection.send(new Message(Message.MessageType.join_queue, null)));
 
-		card.getChildren().addAll(title, lobbyRatingLabel, gamesTitle, gamesListView, refreshBtn, spectateBtn, playBtn);
+		Button vsBotBtn = new Button("Play vs Bot");
+		vsBotBtn.getStyleClass().add("btn-primary");
+		vsBotBtn.setMaxWidth(Double.MAX_VALUE);
+		vsBotBtn.setOnAction(e -> clientConnection.send(new Message(Message.MessageType.play_vs_bot, null)));
 
+		card.getChildren().addAll(title, lobbyRatingLabel, gamesTitle, gamesListView, refreshBtn, spectateBtn, playBtn,
+				vsBotBtn);
+
+		BorderPane.setMargin(card, new Insets(0, 12, 12, 0));
 		StackPane center = new StackPane(card);
+		root.setLeft(friendsCol);
 		root.setTop(buildTopThemeBar());
 		root.setCenter(center);
-		Scene scene = new Scene(root, 820, 680);
+		Scene scene = new Scene(root, 1080, 700);
 		applyTheme(scene);
 		return scene;
 	}
@@ -878,8 +1044,17 @@ public class GuiClient extends Application {
 		switch (msg.type) {
 
 			case auth_ok:
-				myRating = (Integer) msg.data;
-				lobbyRatingLabel.setText("Rating: " + myRating + "  —  " + myUsername);
+				if (msg.data instanceof int[]) {
+					int[] s = (int[]) msg.data;
+					myRating = s[0];
+					myWins = s[1];
+					myLosses = s[2];
+					myDraws = s[3];
+				} else {
+					myRating = (Integer) msg.data;
+					myWins = myLosses = myDraws = 0;
+				}
+				updateLobbyProfileText();
 				clientConnection.send(new Message(Message.MessageType.list_games, null));
 				primaryStage.setScene(sceneMap.get("lobby"));
 				syncThemeToggleLabel(sceneMap.get("lobby").getRoot());
@@ -992,11 +1167,63 @@ public class GuiClient extends Application {
 				break;
 
 			case rating_update:
-				myRating = (Integer) msg.data;
-				if (lobbyRatingLabel != null) {
-					lobbyRatingLabel.setText("Rating: " + myRating + "  —  " + myUsername);
+				if (msg.data instanceof int[]) {
+					int[] s = (int[]) msg.data;
+					myRating = s[0];
+					myWins = s[1];
+					myLosses = s[2];
+					myDraws = s[3];
+				} else {
+					myRating = (Integer) msg.data;
+				}
+				updateLobbyProfileText();
+				break;
+
+			case friend_list_online:
+				@SuppressWarnings("unchecked")
+				ArrayList<String> onlineF = (ArrayList<String>) msg.data;
+				if (onlineFriendsListView != null) {
+					onlineFriendsListView.getItems().clear();
+					if (onlineF != null) {
+						onlineFriendsListView.getItems().addAll(onlineF);
+					}
 				}
 				break;
+
+			case online_status:
+				if (msg.data instanceof Object[]) {
+					Object[] os = (Object[]) msg.data;
+					if (os.length >= 2 && os[0] instanceof String && os[1] instanceof Boolean) {
+						applyFriendOnlineStatus((String) os[0], (Boolean) os[1]);
+					}
+				}
+				break;
+
+			case friend_pending_list:
+				@SuppressWarnings("unchecked")
+				ArrayList<String> pending = (ArrayList<String>) msg.data;
+				rebuildFriendPendingRows(pending != null ? pending : new ArrayList<String>());
+				break;
+
+			case friend_incoming:
+				showFriendIncomingDialog((String) msg.data);
+				break;
+
+			case friend_error: {
+				Alert fe = new Alert(Alert.AlertType.ERROR);
+				fe.setTitle("Friends");
+				fe.setContentText((String) msg.data);
+				fe.show();
+				break;
+			}
+
+			case friend_notice: {
+				Alert fn = new Alert(Alert.AlertType.INFORMATION);
+				fn.setTitle("Friends");
+				fn.setContentText((String) msg.data);
+				fn.show();
+				break;
+			}
 
 			case invalid_move:
 				Alert invalidAlert = new Alert(Alert.AlertType.WARNING);
@@ -1103,9 +1330,7 @@ public class GuiClient extends Application {
 		moveHistoryList = null;
 		opponentTimerLabel = null;
 		myTimerLabel = null;
-		if (lobbyRatingLabel != null && myUsername != null) {
-			lobbyRatingLabel.setText("Rating: " + myRating + "  —  " + myUsername);
-		}
+		updateLobbyProfileText();
 		primaryStage.setScene(sceneMap.get("lobby"));
 		syncThemeToggleLabel(sceneMap.get("lobby").getRoot());
 		clientConnection.send(new Message(Message.MessageType.list_games, null));

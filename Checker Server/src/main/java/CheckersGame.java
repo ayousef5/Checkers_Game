@@ -18,6 +18,16 @@ public class CheckersGame { // handles all game logic
         this.winner = null; // no winner yet
     }
 
+    /** Copy for AI search (independent board state). */
+    public CheckersGame copy() {
+        CheckersGame c = new CheckersGame(redPlayer, blackPlayer);
+        c.board = Board.copyOf(this.board);
+        c.currentPlayer = this.currentPlayer;
+        c.gameOver = this.gameOver;
+        c.winner = this.winner;
+        return c;
+    }
+
     public ArrayList<Move> getValidMoves(String color) { // get all legal moves for a color
         ArrayList<Move> moves = new ArrayList<>(); // list to return
         ArrayList<Move> jumps = new ArrayList<>(); // jumps found
