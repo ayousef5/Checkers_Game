@@ -1,0 +1,38 @@
+.root-app {
+    -fx-background-color: #12121a;
+    -fx-font-family: "DM Sans", "Segoe UI", sans-serif;
+    -fx-font-size: 13px;
+}
+
+.title-lg {
+    -fx-font-family: "Nunito", "DM Sans", sans-serif;
+    -fx-font-weight: bold;
+    -fx-font-size: 18px;
+    -fx-text-fill: #ececf2;
+}
+
+.btn-theme-toggle {
+    -fx-background-color: #2a2a3c;
+    -fx-text-fill: #e8e8f0;
+    -fx-background-radius: 20px;
+    -fx-min-width: 44px;
+    -fx-min-height: 36px;
+    -fx-padding: 4px 12px;
+    -fx-font-size: 16px;
+    -fx-cursor: hand;
+}
+
+.list-view {
+    -fx-background-color: #252536;
+    -fx-control-inner-background: #252536;
+    -fx-text-fill: #e6e6ee;
+}
+
+.list-view .list-cell {
+    -fx-background-color: #252536;
+    -fx-text-fill: #e6e6ee;
+}
+
+.list-view .list-cell:odd {
+    -fx-background-color: #2a2a3a;
+}

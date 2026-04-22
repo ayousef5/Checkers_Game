@@ -1,64 +1,115 @@
-import javafx.application.Application; // base class for JavaFX apps
-import javafx.application.Platform; // run code on UI thread
-import javafx.geometry.Insets; // padding
-import javafx.scene.Scene; // a screen/view
-import javafx.scene.control.ListView; // log list
-import javafx.scene.control.Label; // text label
-import javafx.scene.layout.BorderPane; // layout
-import javafx.scene.layout.VBox; // vertical layout
-import javafx.scene.paint.Color; // colors
-import javafx.scene.text.Font; // font
-import javafx.scene.text.FontWeight; // bold
-import javafx.stage.Stage; // window
-import java.util.HashMap; // scene map
+import javafx.application.Application;
+import javafx.application.Platform;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
+import javafx.scene.Node;
+import javafx.scene.Parent;
+import javafx.scene.Scene;
+import javafx.scene.control.Button;
+import javafx.scene.control.Label;
+import javafx.scene.control.ListView;
+import javafx.scene.layout.BorderPane;
+import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.VBox;
+import javafx.stage.Stage;
 
-public class GuiServer extends Application { // server GUI
+import java.util.HashMap;
 
-	HashMap<String, Scene> sceneMap; // all scenes
-	Server serverConnection; // the server
-	ListView<String> logList; // server event log
+public class GuiServer extends Application {
 
-	public static void main(String[] args) { // entry point
-		launch(args); // start JavaFX
+	HashMap<String, Scene> sceneMap;
+	Server serverConnection;
+	ListView<String> logList;
+	boolean lightTheme = ThemePreferences.isLightTheme();
+	Stage primaryStage;
+
+	public static void main(String[] args) {
+		launch(args);
 	}
 
 	@Override
-	public void start(Stage primaryStage) throws Exception { // called on startup
-		logList = new ListView<>(); // create log list first
-		logList.setStyle("-fx-background-color: #2b2b2b; -fx-text-fill: white;"); // dark style
+	public void start(Stage primaryStage) throws Exception {
+		AppFonts.load();
+		this.primaryStage = primaryStage;
+		logList = new ListView<>();
+		logList.getStyleClass().add("list-view");
 
-		serverConnection = new Server(data -> { // start server with callback
-			Platform.runLater(() -> logList.getItems().add(data.toString())); // log on UI thread
+		serverConnection = new Server(data -> {
+			Platform.runLater(() -> logList.getItems().add(data.toString()));
 		});
 
-		sceneMap = new HashMap<>(); // initialize scene map
-		sceneMap.put("server", createServerGui()); // add server scene
+		sceneMap = new HashMap<>();
+		sceneMap.put("server", createServerGui());
 
-		primaryStage.setOnCloseRequest(e -> { // on window close
-			Platform.exit(); // exit JavaFX
-			System.exit(0); // exit app
+		primaryStage.setOnCloseRequest(e -> {
+			Platform.exit();
+			System.exit(0);
 		});
 
-		primaryStage.setScene(sceneMap.get("server")); // set scene
-		primaryStage.setTitle("Checkers Server"); // window title
-		primaryStage.show(); // show window
+		primaryStage.setScene(sceneMap.get("server"));
+		primaryStage.setTitle("Checkers Server");
+		primaryStage.show();
 	}
 
-	public Scene createServerGui() { // build server UI
-		BorderPane pane = new BorderPane(); // main layout
-		pane.setStyle("-fx-background-color: #2b2b2b;"); // dark background
-		pane.setPadding(new Insets(20)); // padding
+	private void applyTheme(Scene scene) {
+		if (scene == null) return;
+		String path = lightTheme ? "/styles/light.css" : "/styles/dark.css";
+		var url = getClass().getResource(path);
+		if (url != null) {
+			scene.getStylesheets().clear();
+			scene.getStylesheets().add(url.toExternalForm());
+		}
+	}
 
-		Label title = new Label("SERVER LOG"); // title label
-		title.setFont(Font.font("Arial", FontWeight.BOLD, 18)); // bold font
-		title.setTextFill(Color.WHITE); // white text
+	private void visitNodes(Node n, java.util.function.Consumer<Node> fn) {
+		fn.accept(n);
+		if (n instanceof Parent) {
+			for (Node c : ((Parent) n).getChildrenUnmodifiable()) {
+				visitNodes(c, fn);
+			}
+		}
+	}
 
-		VBox top = new VBox(10, title); // top section
-		top.setPadding(new Insets(0, 0, 10, 0)); // bottom padding
+	private void syncThemeButton(Node root) {
+		String g = lightTheme ? "\u263E" : "\u2600";
+		visitNodes(root, n -> {
+			if (n instanceof Button && n.getStyleClass().contains("btn-theme-toggle")) {
+				((Button) n).setText(g);
+			}
+		});
+	}
 
-		pane.setTop(top); // add title at top
-		pane.setCenter(logList); // add log list in center
+	public Scene createServerGui() {
+		BorderPane pane = new BorderPane();
+		pane.getStyleClass().add("root-app");
+		pane.setPadding(new Insets(16));
 
-		return new Scene(pane, 500, 400); // return scene
+		HBox topBar = new HBox();
+		Region sp = new Region();
+		HBox.setHgrow(sp, Priority.ALWAYS);
+		Button themeBtn = new Button(lightTheme ? "\u263E" : "\u2600");
+		themeBtn.getStyleClass().add("btn-theme-toggle");
+		themeBtn.setOnAction(e -> {
+			lightTheme = !lightTheme;
+			ThemePreferences.setLightTheme(lightTheme);
+			Scene sc = primaryStage.getScene();
+			applyTheme(sc);
+			syncThemeButton(sc.getRoot());
+		});
+		topBar.getChildren().addAll(sp, themeBtn);
+		topBar.setPadding(new Insets(0, 0, 12, 0));
+
+		Label title = new Label("SERVER LOG");
+		title.getStyleClass().add("title-lg");
+
+		VBox top = new VBox(8, topBar, title);
+		pane.setTop(top);
+		pane.setCenter(logList);
+
+		Scene scene = new Scene(pane, 520, 440);
+		applyTheme(scene);
+		return scene;
 	}
 }
