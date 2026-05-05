@@ -91,4 +91,4 @@ Launch two client instances and connect them to the server's IP address and port
 4. Players alternate turns; click a piece to select it, then click a valid square to move.
 5. Captures are made by jumping over an opponent's piece.
 6. Reach the opposite end of the board to promote a piece to a King.
-## Watch Live Demo at https://drive.google.com/drive/u/2/folders/1LfOCK_aynnBS4fJ7WmVQVhLvIRrJcRb2
+## Watch Live Demo at https://drive.google.com/file/d/1tcqtiijGU_9ST0xGZ6ZsaoLi_CPv5f1h/view?usp=sharing
